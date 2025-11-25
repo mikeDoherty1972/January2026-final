@@ -1,0 +1,35 @@
+0188:     <string name="dvr_no_dvr_data">No DVR data available</string>
+0189: 
+0190:     <!-- Geyser performance strings -->
+0191:     <string name="geyser_performance_date">Geyser Performance - %1$s</string>
+0192:     <string name="geyser_performance_count">Geyser Performance - %1$d readings from Google Sheets</string>
+0193:     <string name="geyser_performance_no_data">Geyser Performance - No data available</string>
+0194: 
+0195:     <!-- Mike water strings -->
+0196:     <string name="mike_water_liters_format">%1$d Liters</string>
+0197:     <string name="mike_water_title_format">Mike Water Meter - %1$s</string>
+0198:     <string name="mike_water_today_usage">Mike Water Meter - Today's usage</string>
+0199:     <string name="no_data_label">No Data</string>
+0200: 
+0201:     <!-- Power consumption strings -->
+0202:     <string name="power_consumption_date">Power Consumption - %1$s</string>
+0203:     <string name="power_consumption_count">Power Consumption - %1$d readings from Google Sheets</string>
+0204:     <string name="power_consumption_no_data">Power Consumption - No data available</string>
+0205: 
+0206:     <!-- Generic support strings -->
+0207:     <string name="last_update_format">Last Update: %1$s</string>
+0208:     <string name="status_active">Active</string>
+0209: 
+0210:     <!-- Scada UI small string used in multiple places -->
+0211:     <string name="lights_backend_saved">Lights backend saved: %1$s</string>
+0212: 
+0213:     <!-- Strings used in IPERL layout -->
+0214:     <string name="iperl_header">IPERL System</string>
+0215:     <string name="water_meters">Water Meters</string>
+0216:     <string name="mike_water_meter">Mike's Water Meter</string>
+0217:     <string name="signal_label">Signal</string>
+0218:     <string name="water_usage_stats">📊 Water Usage Statistics</string>
+0219:     <string name="daily_usage">Daily Usage</string>
+0220:     <string name="monthly_usage">Monthly Usage</string>
+0221:     <string name="total_usage">Total Usage</string>
+0222:     <string name="data_from_sheets">Data from Google Sheets - Last Update: &#8212;:&#8212;</string>

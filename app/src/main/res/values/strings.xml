@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">november 2025</string>
+    <string name="default_notification_channel_id">security_notifications</string>
+    <string name="channel_name">Security Notifications</string>
+    <string name="channel_description">Notifications for security system alerts</string>
+    <string name="default_web_client_id">741577311231-rl2tf92edh9a84edpro9hpc14pr70uc3.apps.googleusercontent.com</string>
+
+    <!-- Generic UI / dashboard -->
+    <string name="dash_amp">-- A</string>
+    <string name="dash_kw">-- kW</string>
+    <string name="dash_wind">-- km/h</string>
+    <string name="dash_kwh">-- kWh</string>
+    <string name="data_refreshed">Data refreshed</string>
+    <string name="loading_data">Loading data…</string>
+    <string name="loading_sheets">Loading Sheets…</string>
+
+    <!-- Weather graphs strings -->
+    <string name="weather_trends_label">Weather Trends</string>
+    <string name="weather_trends_date">Weather Trends - %1$s</string>
+    <string name="weather_trends_count">Weather Trends - %1$d readings from Google Sheets</string>
+    <string name="weather_trends_no_data">Weather Trends - No data available</string>
+    <string name="weather_trends_error">Weather Trends - Error loading data</string>
+    <string name="temperature_trends">Temperature Trends</string>
+    <string name="humidity_trends">Humidity Trends</string>
+    <string name="wind_speed_trends">Wind Speed Trends</string>
+    <string name="wind_direction">Wind Direction</string>
+    <string name="data_source">Data source: Google Sheets (Last 24 hours)</string>
+
+    <!-- Back / navigation -->
+    <string name="back_button">← Back</string>
+    <string name="system_monitoring">System Monitoring</string>
+
+    <!-- DVR / geyser -->
+    <string name="geyser_temperature">Geyser Temperature</string>
+    <string name="geyser_pressure">Geyser Pressure</string>
+
+    <!-- Alarm / breach strings -->
+    <string name="breach_format">BREACH: %1$s</string>
+    <string name="alarm_active">Alarm Active</string>
+    <string name="alarm_inactive">No Alarm</string>
+
+    <!-- ScadaActivity-specific strings -->
+    <string name="bridge_command_on_sent">Bridge command ON sent</string>
+    <string name="bridge_command_off_sent">Bridge command OFF sent</string>
+    <string name="failed_send_bridge_command">Failed to send bridge command: %1$s</string>
+    <string name="bridge_doc_readback">Bridge doc: %1$s</string>
+    <string name="google_signin_failed_missing_idtoken">Google Sign-In failed: Missing idToken. Please try again.</string>
+    <string name="google_signin_failed_generic">Google Sign-In failed: %1$s</string>
+    <string name="google_signin_cancelled">Google Sign-In canceled or failed. Cannot control lights.</string>
+    <string name="firebase_auth_failed">Firebase authentication failed.</string>
+    <string name="alarm_settings_saved">Alarm settings saved</string>
+    <string name="alarm_history_cleared">Alarm history cleared</string>
+    <string name="alarm_channels_reset">Alarm channels reset to bundled tone</string>
+    <string name="failed_reset_channels">Failed to reset channels</string>
+
+    <!-- Status & small labels -->
+    <string name="dvr_label">DVR: —°C</string>
+    <string name="status_online">Online</string>
+    <string name="status_stale">Stale</string>
+    <string name="no_sheets_data_short">No Sheets data</string>
+    <string name="error_short">Error</string>
+    <string name="text_on">ON</string>
+    <string name="text_off">OFF</string>
+    <string name="text_unknown">Unknown</string>
+
+    <!-- Lights / details formats -->
+    <string name="drive_prefix">Drive: %1$s</string>
+    <string name="y1298_format">Y1298:%1$s</string>
+    <string name="cmd_format">Cmd:%1$s</string>
+    <string name="at_format">\@ %1$s</string>
+
+    <!-- Recent alarms formats -->
+    <string name="recent_alarm_with_time">%1$d. [%2$s] %3$s - %4$s</string>
+    <string name="recent_alarm_no_time">%1$d. %2$s - %3$s</string>
+    <string name="recent_alarm_empty">%1$d. —</string>
+
+    <!-- Security UI strings -->
+    <string name="security_heading">🚨 Security System</string>
+    <string name="system_status_label">System Status</string>
+    <string name="system_status_default">🟢 All Zones Armed - System Online</string>
+    <string name="security_zones_label">Security Zones</string>
+    <string name="front_label">Front</string>
+    <string name="garage_label">Garage</string>
+    <string name="garage_side_label">Garage Side</string>
+    <string name="north_label">North</string>
+    <string name="south_label">South</string>
+    <string name="back_label">Back</string>
+    <string name="door_label">Door</string>
+    <string name="clear_label">🟢 Clear</string>
+    <string name="recent_activity_label">Recent Activity</string>
+    <string name="no_recent_activity">No recent activity</string>
+
+    <!-- Emoji labels for security UI -->
+    <string name="emoji_front">🏡</string>
+    <string name="emoji_garage">🚪</string>
+    <string name="emoji_garage_side">🏠</string>
+    <string name="emoji_north">❄️</string>
+    <string name="emoji_door">🚪</string>
+    <string name="emoji_south">🌅</string>
+    <string name="emoji_back">🌳</string>
+
+    <!-- Alarm settings dialog strings -->
+    <string name="alarms_title">Set-up</string>
+    <string name="thresholds">Thresholds</string>
+    <string name="dvr_pulse_stale">DVR pulse stale duration (minutes)</string>
+    <string name="hint_60">60</string>
+    <string name="hourly_volume_threshold">Hourly volume threshold (L)</string>
+    <string name="hint_500">500</string>
+    <string name="window_hours">Window (hours)</string>
+    <string name="hint_1">1</string>
+    <string name="low_pressure_threshold">Low water pressure threshold (bar)</string>
+    <string name="hint_1_0">1.0</string>
+    <string name="high_amps_threshold">High amps threshold (A)</string>
+    <string name="hint_6_0">6.0</string>
+    <string name="high_amps_duration">High amps duration (minutes)</string>
+    <string name="water_usage_variance">Water usage variance threshold</string>
+    <string name="hint_0_1">0.1</string>
+    <string name="appearance_controls">Appearance &amp; Controls</string>
+    <string name="invert_wind_arrow">Invert wind arrow</string>
+    <string name="preview_wind_arrow">Preview wind arrow</string>
+    <string name="offset_format">Offset: %1$d°</string>
+    <string name="lights_control_backend">Lights control backend</string>
+    <string name="drive">Drive</string>
+    <string name="firebase">Firebase</string>
+    <string name="save_backend">Save backend</string>
+    <string name="reload">Reload</string>
+    <string name="card">Card</string>
+    <string name="graph">Graph</string>
+    <string name="security_alarm_schedule">Security alarm schedule</string>
+    <string name="enable_at">Enable at</string>
+    <string name="set_time">Set time</string>
+    <string name="disable_at">Disable at</string>
+    <string name="clear_schedule">Clear schedule</string>
+    <string name="test">Test</string>
+    <string name="test_alarms_desc">Test alarms</string>
+    <string name="preview">Preview</string>
+    <string name="preview_desc">Play preview tone</string>
+    <string name="reset">Reset</string>
+    <string name="reset_desc">Reset alarm channel</string>
+    <string name="save">Save</string>
+    <string name="save_desc">Save alarm settings</string>
+    <string name="recent_alarms">Recent Alarms</string>
+    <string name="recent_placeholder">%1$d. —</string>
+    <string name="clear">Clear</string>
+
+    <!-- Image viewer strings -->
+    <string name="image_view_refresh">Refresh</string>
+    <string name="image_view_back">Back</string>
+    <string name="image_view_content_desc">Security camera image</string>
+
+    <!-- Misc -->
+    <string name="play_tone">Play tone</string>
+    <string name="stop">Stop</string>
+    <string name="unable_play_tone">Unable to play tone</string>
+
+    <!-- DVR-specific strings -->
+    <string name="dvr_trends_date">DVR Temperature Monitoring - %1$s</string>
+    <string name="dvr_running_normal">DVR Running Normal - %1$s°C</string>
+    <string name="dvr_no_dvr_data">No DVR data available</string>
+
+    <!-- Geyser performance strings -->
+    <string name="geyser_performance_date">Geyser Performance - %1$s</string>
+    <string name="geyser_performance_count">Geyser Performance - %1$d readings from Google Sheets</string>
+    <string name="geyser_performance_no_data">Geyser Performance - No data available</string>
+
+    <!-- Mike water strings -->
+    <string name="mike_water_liters_format">%1$d Liters</string>
+    <string name="mike_water_title_format">Mike Water Meter - %1$s</string>
+    <string name="mike_water_today_usage">Mike Water Meter - Todays usage</string>
+    <string name="no_data_label">No Data</string>
+
+    <!-- Power consumption strings -->
+    <string name="power_consumption_date">Power Consumption - %1$s</string>
+    <string name="power_consumption_count">Power Consumption - %1$d readings from Google Sheets</string>
+    <string name="power_consumption_no_data">Power Consumption - No data available</string>
+
+    <!-- Generic support strings -->
+    <string name="last_update_format">Last Update: %1$s</string>
+    <string name="status_active">Active</string>
+
+    <!-- Scada UI small string used in multiple places -->
+    <string name="lights_backend_saved">Lights backend saved: %1$s</string>
+
+</resources>

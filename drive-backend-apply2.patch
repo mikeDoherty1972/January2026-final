@@ -1,0 +1,14 @@
+*** Begin Patch
+*** Update File: app/src/main/java/com/security/app/ScadaActivity.kt
+@@
+-        // We no longer poll the Drive lights file. Instead listen for status updates in Firestore.
+-        // Start Firestore listener for lights status so UI shows canonical confirmation from the bridge.
+-        try { fetchLightsStatusOnce() } catch (_: Exception) {}
++        // We no longer poll the Drive lights file. Instead listen for status updates in Firestore.
++        // Start Firestore listener for lights status so UI shows canonical confirmation from the bridge.
++        try { fetchLightsStatusOnce() } catch (_: Exception) {}
++        // Ensure lights backend selection is applied now that Drive is available. If the user
++        // selected 'drive' as the backend, this will start the drive polling job.
++        try { applyLightsBackendSelection() } catch (_: Exception) {}
+*** End Patch
+
