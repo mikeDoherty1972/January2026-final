@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>DVR Graphs</title>
+  <link href="../styles.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <header class="app-bar">
+    <div class="app-bar-inner">
+      <a href="../index.html" class="app-icon">🏠</a>
+      <div class="app-title"><div class="title">DVR Graphs</div><div class="subtitle">Enclosure Temp</div></div>
+      <div class="spacer"></div>
+      <div class="app-actions"><a class="btn" href="../pages/scada.html">Back to SCADA</a></div>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <div class="card-header"><span class="material-icons card-icon">thermostat</span><h2>DVR Temperature</h2></div>
+      <canvas id="dvrTempChart" height="200"></canvas>
+    </section>
+
+    <section class="card">
+      <div class="card-header"><span class="material-icons card-icon">storage</span><h2>Heartbeat Log</h2></div>
+      <div id="dvrHeartbeatLog" class="muted">Recent heartbeat events will be shown here.</div>
+    </section>
+  </main>
+
+  <footer class="app-footer"><small>DVR graphs — prototype</small></footer>
+  <script src="../js/graphs.js"></script>
+  <script src="../js/dvr.js"></script>
+</body>
+</html>

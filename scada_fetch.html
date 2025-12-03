@@ -1,0 +1,155 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SCADA Dashboard</title>
+  <link href="../styles.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="scada-page">
+  <header class="app-bar">
+    <div class="app-bar-inner">
+      <a href="../index.html" class="app-icon">ð </a>
+      <div class="app-title"><div class="title">SCADA Dashboard</div><div class="subtitle">Full view</div></div>
+      <div class="spacer"></div>
+      <div class="app-actions">
+        <a class="btn" href="../pages/iperl.html">IPERL</a>
+        <a class="btn" href="../pages/security.html">Security</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="scada-grid">
+    <aside class="scada-left">
+      <div class="gauge-box">
+        <div class="gauge-title">temp outside</div>
+        <div class="gauge small-gauge"><div id="outdoorTemp">--Â°C</div></div>
+      </div>
+      <div class="gauge-box">
+        <div class="gauge-title">temp inside</div>
+        <div class="gauge small-gauge"><div id="waterTempValue">--Â°C</div></div>
+      </div>
+      <div class="gauge-box">
+        <div class="gauge-title">humidity outside</div>
+        <div class="gauge small-gauge"><div id="humidityOutside">--%</div></div>
+      </div>
+      <div class="gauge-box">
+        <div class="gauge-title">humidity inside</div>
+        <div class="gauge small-gauge"><div id="humidityInside">--%</div></div>
+      </div>
+      <div class="gauge-box small-row">
+        <div class="gauge-title">dewpoint</div>
+        <div class="gauge tiny-gauge"><div id="dewPoint">--Â°C</div></div>
+      </div>
+      <div class="compass-wrap">
+        <div class="wind-compass" id="windCompass">
+          <div class="compass-arrow" id="windArrow">â¸</div>
+          <div class="compass-label" id="windDirNum">--</div>
+        </div>
+        <div class="compass-text"><div id="windSpeedText">-- km/h</div><div id="windDirText">north west</div></div>
+      </div>
+      <div class="pressure-box">
+        <div>Pressure: <span id="pressureValue">-- hpa</span></div>
+        <div class="pressure-controls"><button class="btn">pressure</button><button class="btn">min - max</button></div>
+      </div>
+    </aside>
+
+    <section class="scada-center">
+      <div class="chart-title">all trends</div>
+      <div class="chart-frame">
+        <canvas id="allTrendsChart"></canvas>
+      </div>
+      <div class="date-row">
+        <div id="scada-date">--</div>
+      </div>
+    </section>
+
+    <aside class="scada-right">
+      <div class="legend-box">
+        <div class="legend-item"><span class="legend-color yellow"></span> temp in</div>
+        <div class="legend-item"><span class="legend-color blue"></span> temp out</div>
+        <div class="legend-item"><span class="legend-color green"></span> humid in</div>
+        <div class="legend-item"><span class="legend-color cyan"></span> humid out</div>
+        <div class="legend-item"><span class="legend-color teal"></span> wind speed</div>
+        <div class="legend-item"><span class="legend-color indigo"></span> geyser temp</div>
+      </div>
+
+      <div class="bars-box">
+        <div class="bar-row"><div class="bar-label"><span id="currentAmps">2.2 A</span></div><div class="bar-track"><div class="bar-fill green" style="width:40%"></div></div></div>
+        <div class="bar-row"><div class="bar-label"><span id="currentPressure">2.9 Bar</span></div><div class="bar-track"><div class="bar-fill aqua" style="width:60%"></div></div></div>
+        <div class="bar-row"><div class="bar-label"><span id="currentPower">54.5 Deg</span></div><div class="bar-track"><div class="bar-fill blue" style="width:70%"></div></div></div>
+      </div>
+    </aside>
+
+    <!-- Data sources card moved below -->
+    <section class="scada-bottom">
+      <div class="card">
+        <h3>Source Status</h3>
+        <div id="cfg-status" class="muted">Not started</div>
+        <div style="margin-top:6px">DVR: <span id="dvr-sheet-status">idle</span> â Temp: <strong id="dvrTemp">-- Â°C</strong> â HB: <span id="dvrHeartbeatStatus">--</span></div>
+        <div style="margin-top:6px">Stormglass: <span id="sg-status">idle</span></div>
+      </div>
+      <div class="data-sources card">
+        <h3>Data Sources & Auto-Refresh</h3>
+        <div class="muted">Use the dashboard Data Sources to configure CSV URLs and enable auto-refresh.</div>
+        <div style="margin-top:8px">
+          <label for="cfg-dvr">DVR CSV export URL</label>
+          <input id="cfg-dvr" placeholder="https://docs.google.com/spreadsheets/d/ID/export?format=csv&gid=..." />
+        </div>
+        <div style="margin-top:8px">
+          <label><input type="checkbox" id="cfg-use-public" /> Use public Google Sheet (no proxy)</label>
+        </div>
+        <div style="margin-top:8px">
+          <label for="cfg-sheet-id">Google Sheet ID (for public sheets)</label>
+          <input id="cfg-sheet-id" placeholder="spreadsheetId (the long ID in the sheet URL)" />
+        </div>
+        <div style="margin-top:8px">
+          <label for="cfg-dvr-tab">DVR tab name</label>
+          <input id="cfg-dvr-tab" placeholder="Sheet tab name (e.g. DVR)" />
+        </div>
+        <div style="margin-top:8px">
+          <label for="cfg-iperl-tab">IPERL tab name</label>
+          <input id="cfg-iperl-tab" placeholder="Sheet tab name (e.g. IPERL)" />
+        </div>
+        <div style="margin-top:8px">
+          <label for="cfg-geyser-tab">Geyser tab name</label>
+          <input id="cfg-geyser-tab" placeholder="Sheet tab name (e.g. Geyser)" />
+        </div>
+        <div style="margin-top:8px">
+          <label for="cfg-power-tab">Power tab name</label>
+          <input id="cfg-power-tab" placeholder="Sheet tab name (e.g. Power)" />
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="bottom-nav-wrap">
+    <nav class="bottom-nav" aria-label="SCADA navigation">
+      <a class="btn-nav" href="temp-inside.html">temp inside details</a>
+      <a class="btn-nav" href="temp-out.html">temp out details</a>
+      <a class="btn-nav" href="wind-speed.html">wind speed</a>
+      <a class="btn-nav" href="wind-dir.html">wind dir</a>
+      <a class="btn-nav" href="all-trends.html">all temp trends</a>
+      <a class="btn-nav" href="water.html">water</a>
+      <a class="btn-nav" href="lights.html">lights</a>
+      <a class="btn-nav" href="garden.html">garden</a>
+      <a class="btn-nav" href="geyser.html">geyser</a>
+      <a class="btn-nav" href="power.html">power</a>
+      <a class="btn-nav" href="main.html">main</a>
+    </nav>
+  </div>
+
+  <footer class="app-footer"><small>SCADA full dashboard â static web prototype</small></footer>
+  <script src="../js/scada.js"></script>
+  <script src="../js/init-dashboard.js"></script>
+  <script>
+    // set active nav item
+    (function(){
+      const path = location.pathname.split('/').pop();
+      document.querySelectorAll('.bottom-nav a').forEach(a=>{ if(a.getAttribute('href')===path) a.classList.add('active'); });
+    })();
+  </script>
+</body>
+</html>
+

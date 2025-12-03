@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset='utf-8'/>
+  <meta name='viewport' content='width=device-width,initial-scale=1'/>
+  <title>Dashboard</title>
+  <link href="../styles.css" rel="stylesheet">
+</head>
+<body>
+  <header class="app-bar">
+    <div class="app-bar-inner">
+      <a href="scada.html" class="app-icon">🏠</a>
+      <div class="app-title"><div class="title">Dashboard</div></div>
+      <div class="spacer"></div>
+      <nav class="app-bar-nav">
+        <a href="main.html" class="active">Dashboard</a>
+        <a href="power.html">Power</a>
+        <a href="weather.html">Weather</a>
+        <a href="water.html">Water</a>
+        <a href="security.html">Security</a>
+        <a href="debug.html">Debug</a>
+      </nav>
+    </div>
+  </header>
+  <main class="container">
+    <div class="dashboard-grid">
+        <div class="card">
+            <h2>Live Weather</h2>
+            <div id="live-weather-value" class="dashboard-card-value">--°C</div>
+            <div class="wind-display">
+                <div id="wind-barb" class="wind-barb">↑</div>
+                <div id="wind-speed-value">-- km/h</div>
+            </div>
+            <div id="humidity-value">Humidity: --%</div>
+        </div>
+        <div class="card">
+            <h2>Security</h2>
+            <div id="security-summary-value" class="dashboard-card-value status-clear">System Armed</div>
+        </div>
+        <div class="card">
+            <h2>Power Usage</h2>
+            <div id="power-usage-value" class="dashboard-card-value">-- kW</div>
+            <div class="dashboard-card-extra">Amps: <span id="power-amps-value">--</span></div>
+            <div class="dashboard-card-extra">Daily: <span id="power-daily-value">--</span> kWh</div>
+        </div>
+        <div class="card">
+            <h2>Water Meter</h2>
+            <div id="water-meter-value" class="dashboard-card-value">--</div>
+            <div class="dashboard-card-extra">Today: <span id="water-daily-value">--</span></div>
+            <div class="dashboard-card-extra">Total: <span id="water-total-value">--</span></div>
+        </div>
+    </div>
+  </main>
+  <footer class="app-footer"></footer>
+  <script src="../scripts/charts.js"></script>
+</body>
+</html>
