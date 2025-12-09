@@ -313,9 +313,9 @@ class SecurityActivity : BaseActivity() {
                 val ssid = getCurrentSsid()
                 if (ssid != null) {
                     getSharedPreferences("app_prefs", Context.MODE_PRIVATE).edit().putString("home_ssid", ssid).apply()
-                    runOnUiThread { android.widget.Toast.makeText(this, "Saved home SSID: $ssid", android.widget.Toast.LENGTH_SHORT).show() }
+                    try { ToastHelper.show(this, "Saved home SSID: $ssid", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
                 } else {
-                    runOnUiThread { android.widget.Toast.makeText(this, "Unable to read SSID", android.widget.Toast.LENGTH_SHORT).show() }
+                    try { ToastHelper.show(this, "Unable to read SSID", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
                 }
             } catch (e: Exception) {
                 Log.w("SecurityActivity", "saveCurrentSsidAsHome failed", e)
@@ -366,7 +366,7 @@ class SecurityActivity : BaseActivity() {
         securityAlarmsSwitch.isChecked = enabledPref
         securityAlarmsSwitch.setOnCheckedChangeListener { _, isChecked ->
             prefs.edit().putBoolean("security_alarms_enabled", isChecked).apply()
-            android.widget.Toast.makeText(this, if (isChecked) "Security alarms enabled" else "Security alarms disabled", android.widget.Toast.LENGTH_SHORT).show()
+            try { ToastHelper.show(this, if (isChecked) "Security alarms enabled" else "Security alarms disabled", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
             updateScheduleUi()
         }
 
@@ -376,7 +376,7 @@ class SecurityActivity : BaseActivity() {
         securityForceSwitch.isChecked = forcePref
         securityForceSwitch.setOnCheckedChangeListener { _, isChecked ->
             prefs.edit().putBoolean("security_alarms_force_on", isChecked).apply()
-            android.widget.Toast.makeText(this, if (isChecked) "Security alarms forced ON" else "Security alarms no longer forced", android.widget.Toast.LENGTH_SHORT).show()
+            try { ToastHelper.show(this, if (isChecked) "Security alarms forced ON" else "Security alarms no longer forced", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
             updateScheduleUi()
         }
 
@@ -385,7 +385,7 @@ class SecurityActivity : BaseActivity() {
         securityForceOffSwitch.isChecked = forceOffPref
         securityForceOffSwitch.setOnCheckedChangeListener { _, isChecked ->
             prefs.edit().putBoolean("security_alarms_force_off", isChecked).apply()
-            android.widget.Toast.makeText(this, if (isChecked) "Security alarms forced OFF" else "Security alarms no longer forced OFF", android.widget.Toast.LENGTH_SHORT).show()
+            try { ToastHelper.show(this, if (isChecked) "Security alarms forced OFF" else "Security alarms no longer forced OFF", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
             updateScheduleUi()
         }
 
@@ -418,7 +418,7 @@ class SecurityActivity : BaseActivity() {
                 if (refreshId != 0) {
                     try {
                         findViewById<android.widget.Button>(refreshId).setOnClickListener {
-                            Toast.makeText(this, "Refreshing network status...", Toast.LENGTH_SHORT).show()
+                            try { ToastHelper.show(this, "Refreshing network status...", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
                             // Active fetch then update indicators when done
                             fetchAndCacheSsidOnce { runOnUiThread { updateNetworkIndicators(networkHomeDot, networkBridgeDot, networkHomeDotInline) } }
                         }
@@ -483,10 +483,10 @@ class SecurityActivity : BaseActivity() {
             builder.setItems(options) { _, which ->
                 when (which) {
                     0 -> showColorPicker("card_security_color", "Choose Security card color") {
-                        android.widget.Toast.makeText(this, "Security card color saved. Return to dashboard to see change.", android.widget.Toast.LENGTH_SHORT).show()
+                        try { ToastHelper.show(this, "Security card color saved. Return to dashboard to see change.", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
                     }
                     1 -> showColorPicker("graph_background_color", "Choose Security graph background") {
-                        android.widget.Toast.makeText(this, "Security graph background saved.", android.widget.Toast.LENGTH_SHORT).show()
+                        try { ToastHelper.show(this, "Security graph background saved.", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
                     }
                 }
             }
@@ -529,7 +529,7 @@ class SecurityActivity : BaseActivity() {
                 openImageView(url, true)
             } else {
                 Log.w("SecurityActivity", "Card pressed: $zoneName -> no image URL configured")
-                Toast.makeText(this, "No camera image available for $zoneName", Toast.LENGTH_SHORT).show()
+                try { ToastHelper.show(this, "No camera image available for $zoneName", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
             }
         }
 
@@ -827,6 +827,9 @@ class SecurityActivity : BaseActivity() {
             val forceOn = prefs.getBoolean("security_alarms_force_on", false)
             val enabled = prefs.getBoolean("security_alarms_enabled", true)
 
+            // New: explicit opt-in flag for enabling alarms when away from the home network
+            val enableWhenAway = prefs.getBoolean("security_enable_when_away", false)
+
             // Schedule values in minutes since midnight or null if not configured
             val enableHour = prefs.getInt("security_enable_hour", -1)
             val enableMin = prefs.getInt("security_enable_min", 0)
@@ -837,10 +840,11 @@ class SecurityActivity : BaseActivity() {
 
             // Determine presence using modern ConnectivityManager + LinkProperties
             val isAtHome = try {
-                getGatewayIp()?.let { gateway ->
-                    Log.d("SecurityActivity", "Detected gateway: $gateway")
-                    gateway == "192.168.8.1"
-                } ?: false
+                // Use the unified helper isOnHomeNetwork() which prefers saved SSID, known gateways
+                // and RFC1918 heuristics. This avoids a brittle equality check against a single gateway.
+                val onHome = isOnHomeNetwork()
+                Log.d("SecurityActivity", "Presence detection via isOnHomeNetwork -> $onHome")
+                onHome
             } catch (e: Exception) {
                 Log.w("SecurityActivity", "presence check failed", e)
                 // Conservative default: assume at home if presence check fails
@@ -852,6 +856,7 @@ class SecurityActivity : BaseActivity() {
                 forceOn = forceOn,
                 forceOff = forceOff,
                 isAtHome = isAtHome,
+                enableWhenAway = enableWhenAway,
                 scheduleStartMinutes = scheduleStart,
                 scheduleEndMinutes = scheduleEnd
             )

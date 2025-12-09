@@ -187,25 +187,21 @@ class ScadaActivity : BaseActivity() {
                     if (task.isSuccessful) {
                         val account = task.result
                         if (account?.idToken.isNullOrEmpty()) {
-                            runOnUiThread {
-                                android.widget.Toast.makeText(this, getString(R.string.google_signin_failed_missing_idtoken), android.widget.Toast.LENGTH_LONG).show()
-                            }
+                            try { ToastHelper.show(this@ScadaActivity, getString(R.string.google_signin_failed_missing_idtoken), android.widget.Toast.LENGTH_LONG) } catch (_: Exception) {}
                             return@registerForActivityResult
                         }
                         // account non-null here
                         firebaseAuthWithGoogle(account)
                         initializeDriveService(account)
                     } else {
-                        runOnUiThread {
-                            android.widget.Toast.makeText(this, getString(R.string.google_signin_failed_generic, task.exception?.localizedMessage ?: ""), android.widget.Toast.LENGTH_LONG).show()
-                        }
+                        try { ToastHelper.show(this@ScadaActivity, getString(R.string.google_signin_failed_generic, task.exception?.localizedMessage ?: ""), android.widget.Toast.LENGTH_LONG) } catch (_: Exception) {}
                     }
                 } else {
-                    runOnUiThread { android.widget.Toast.makeText(this, getString(R.string.google_signin_cancelled), android.widget.Toast.LENGTH_LONG).show() }
+                    try { ToastHelper.show(this@ScadaActivity, getString(R.string.google_signin_cancelled), android.widget.Toast.LENGTH_LONG) } catch (_: Exception) {}
                 }
             } catch (e: Exception) {
                 Log.w("ScadaActivity", "Sign-in launcher callback error", e)
-                runOnUiThread { android.widget.Toast.makeText(this, getString(R.string.google_signin_failed_generic, e.localizedMessage ?: ""), android.widget.Toast.LENGTH_LONG).show() }
+                try { ToastHelper.show(this@ScadaActivity, getString(R.string.google_signin_failed_generic, e.localizedMessage ?: ""), android.widget.Toast.LENGTH_LONG) } catch (_: Exception) {}
             }
         }
 
@@ -349,16 +345,19 @@ class ScadaActivity : BaseActivity() {
                     "command_ts" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
                     "command_source" to "android_app"
                 )
+
                 bridgeCmdDoc.set(bridgePayload, com.google.firebase.firestore.SetOptions.merge())
                     .addOnSuccessListener {
                         Log.d("ScadaActivity", "Wrote bridge command doc (desired=$desired)")
                         // Read back the document to confirm the write landed and log/notify user for debugging
                         try {
-                            bridgeCmdDoc.get().addOnSuccessListener { bdoc ->
-                                Log.d("ScadaActivity", "bridgeCmdDoc after write: ${bdoc.data}")
-                                val sb = bdoc.data?.toString() ?: "(no bridge doc)"
-                                try { runOnUiThread { android.widget.Toast.makeText(this@ScadaActivity, getString(R.string.bridge_doc_readback, sb), android.widget.Toast.LENGTH_LONG).show() } } catch (_: Exception) {}
-                            }.addOnFailureListener { e -> Log.w("ScadaDiag", "Failed reading bridgeCmdDoc", e) }
+                            bridgeCmdDoc.get()
+                                .addOnSuccessListener { bdoc ->
+                                    Log.d("ScadaActivity", "bridgeCmdDoc after write: ${bdoc.data}")
+                                    val sb = bdoc.data?.toString() ?: "(no bridge doc)"
+                                    try { ToastHelper.show(this@ScadaActivity, getString(R.string.bridge_doc_readback, sb), android.widget.Toast.LENGTH_LONG) } catch (_: Exception) {}
+                                }
+                                .addOnFailureListener { e -> Log.w("ScadaDiag", "Failed reading bridgeCmdDoc", e) }
                         } catch (e: Exception) {
                             Log.w("ScadaDiag", "Readback failed", e)
                         }
@@ -366,7 +365,34 @@ class ScadaActivity : BaseActivity() {
                     }
                     .addOnFailureListener { e ->
                         Log.e("ScadaActivity", "Failed writing bridge command doc", e)
-                        onFailure?.invoke(e)
+                        // Log current auth state for diagnosis
+                        try {
+                            val currentUser = auth?.currentUser
+                            Log.d("ScadaActivity", "Firebase auth currentUser uid=${currentUser?.uid} email=${currentUser?.email}")
+                        } catch (_: Exception) {}
+
+                        // Enhanced handling: if PERMISSION_DENIED, prompt user to re-authenticate
+                        val isPermError = try {
+                            (e is com.google.firebase.firestore.FirebaseFirestoreException && e.code == com.google.firebase.firestore.FirebaseFirestoreException.Code.PERMISSION_DENIED)
+                                    || (e?.message?.contains("PERMISSION_DENIED", ignoreCase = true) == true)
+                        } catch (_: Exception) { false }
+
+                        if (isPermError) {
+                            runOnUiThread {
+                                try {
+                                    androidx.appcompat.app.AlertDialog.Builder(this@ScadaActivity)
+                                        .setTitle(R.string.error_short)
+                                        .setMessage("Permission error sending bridge command:\n${e?.message}\n\nWould you like to sign in to Google to restore permissions?")
+                                        .setPositiveButton(android.R.string.ok, { _, _ -> try { ensureFreshGoogleSignIn() } catch (_: Exception) {} })
+                                        .setNegativeButton(android.R.string.cancel, null)
+                                        .show()
+                                } catch (_: Exception) {
+                                    try { ToastHelper.show(this@ScadaActivity, "Permission error: ${e?.message}", android.widget.Toast.LENGTH_LONG) } catch (_: Exception) {}
+                                }
+                            }
+                        } else {
+                            onFailure?.invoke(e)
+                        }
                     }
             } catch (e: Exception) {
                 Log.e("ScadaActivity", "Exception preparing bridge payload", e)
@@ -378,12 +404,37 @@ class ScadaActivity : BaseActivity() {
              Log.d("ScadaActivity", "Lights ON clicked — writing bridge command")
              writeBridgeCommand(true,
                  onSuccess = {
-                     runOnUiThread { android.widget.Toast.makeText(this, getString(R.string.bridge_command_on_sent), android.widget.Toast.LENGTH_SHORT).show() }
+                     ToastHelper.show(this@ScadaActivity, getString(R.string.bridge_command_on_sent), android.widget.Toast.LENGTH_SHORT)
                      try { startLightsPolling() } catch (_: Exception) {}
                  },
                  onFailure = { e ->
-                     runOnUiThread { android.widget.Toast.makeText(this, getString(R.string.failed_send_bridge_command, e.message ?: ""), android.widget.Toast.LENGTH_LONG).show() }
-                     try { ensureFreshGoogleSignIn() } catch (_: Exception) {}
+                     Log.e("ScadaActivity", "Lights ON write failed", e)
+                     try {
+                         val currentUser = auth?.currentUser
+                         Log.d("ScadaActivity", "auth.currentUser uid=${currentUser?.uid} email=${currentUser?.email}")
+                     } catch (_: Exception) {}
+                     val errMsg = try { e?.message ?: e.toString() } catch (_: Exception) { "Unknown error" }
+                     val isPerm = try {
+                         (e is com.google.firebase.firestore.FirebaseFirestoreException && e.code == com.google.firebase.firestore.FirebaseFirestoreException.Code.PERMISSION_DENIED)
+                                 || errMsg.contains("PERMISSION_DENIED", ignoreCase = true)
+                     } catch (_: Exception) { false }
+                     if (isPerm) {
+                         runOnUiThread {
+                             try {
+                                 androidx.appcompat.app.AlertDialog.Builder(this@ScadaActivity)
+                                     .setTitle(R.string.error_short)
+                                     .setMessage("Permission error sending bridge command:\n$errMsg\n\nWould you like to sign in to Google to restore permissions?")
+                                     .setPositiveButton(android.R.string.ok, { _, _ -> try { ensureFreshGoogleSignIn() } catch (_: Exception) {} })
+                                     .setNegativeButton(android.R.string.cancel, null)
+                                     .show()
+                             } catch (_: Exception) {
+                                 try { ToastHelper.show(this@ScadaActivity, "Permission error: $errMsg", android.widget.Toast.LENGTH_LONG) } catch (_: Exception) {}
+                             }
+                         }
+                     } else {
+                         try { ToastHelper.show(this@ScadaActivity, getString(R.string.failed_send_bridge_command, errMsg), android.widget.Toast.LENGTH_LONG) } catch (_: Exception) {}
+                         try { ensureFreshGoogleSignIn() } catch (_: Exception) {}
+                     }
                  }
              )
          }
@@ -392,12 +443,37 @@ class ScadaActivity : BaseActivity() {
              Log.d("ScadaActivity", "Lights OFF clicked — writing bridge command")
              writeBridgeCommand(false,
                  onSuccess = {
-                     runOnUiThread { android.widget.Toast.makeText(this, getString(R.string.bridge_command_off_sent), android.widget.Toast.LENGTH_SHORT).show() }
+                     ToastHelper.show(this@ScadaActivity, getString(R.string.bridge_command_off_sent), android.widget.Toast.LENGTH_SHORT)
                      try { startLightsPolling() } catch (_: Exception) {}
                  },
                  onFailure = { e ->
-                     runOnUiThread { android.widget.Toast.makeText(this, getString(R.string.failed_send_bridge_command, e.message ?: ""), android.widget.Toast.LENGTH_LONG).show() }
-                     try { ensureFreshGoogleSignIn() } catch (_: Exception) {}
+                     Log.e("ScadaActivity", "Lights OFF write failed", e)
+                     try {
+                         val currentUser = auth?.currentUser
+                         Log.d("ScadaActivity", "auth.currentUser uid=${currentUser?.uid} email=${currentUser?.email}")
+                     } catch (_: Exception) {}
+                     val errMsg = try { e?.message ?: e.toString() } catch (_: Exception) { "Unknown error" }
+                     val isPerm = try {
+                         (e is com.google.firebase.firestore.FirebaseFirestoreException && e.code == com.google.firebase.firestore.FirebaseFirestoreException.Code.PERMISSION_DENIED)
+                                 || errMsg.contains("PERMISSION_DENIED", ignoreCase = true)
+                     } catch (_: Exception) { false }
+                     if (isPerm) {
+                         runOnUiThread {
+                             try {
+                                 androidx.appcompat.app.AlertDialog.Builder(this@ScadaActivity)
+                                     .setTitle(R.string.error_short)
+                                     .setMessage("Permission error sending bridge command:\n$errMsg\n\nWould you like to sign in to Google to restore permissions?")
+                                     .setPositiveButton(android.R.string.ok, { _, _ -> try { ensureFreshGoogleSignIn() } catch (_: Exception) {} })
+                                     .setNegativeButton(android.R.string.cancel, null)
+                                     .show()
+                             } catch (_: Exception) {
+                                 try { ToastHelper.show(this@ScadaActivity, "Permission error: $errMsg", android.widget.Toast.LENGTH_LONG) } catch (_: Exception) {}
+                             }
+                         }
+                     } else {
+                         try { ToastHelper.show(this@ScadaActivity, getString(R.string.failed_send_bridge_command, errMsg), android.widget.Toast.LENGTH_LONG) } catch (_: Exception) {}
+                         try { ensureFreshGoogleSignIn() } catch (_: Exception) {}
+                     }
                  }
              )
          }
@@ -457,7 +533,7 @@ class ScadaActivity : BaseActivity() {
 
     private fun refreshData() {
         monitorGeyserData()
-        android.widget.Toast.makeText(this, "Data refreshed", android.widget.Toast.LENGTH_SHORT).show()
+        try { ToastHelper.show(this@ScadaActivity, "Data refreshed", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
     }
 
     private fun setupGraphClickListeners() {
@@ -905,7 +981,7 @@ class ScadaActivity : BaseActivity() {
         if (account.idToken.isNullOrEmpty()) {
             Log.e("ScadaActivity", "idToken is null or empty. Cannot authenticate with Firebase.")
             runOnUiThread {
-                android.widget.Toast.makeText(this, "Google Sign-In failed: Missing idToken. Please try again.", android.widget.Toast.LENGTH_LONG).show()
+                try { ToastHelper.show(this, "Google Sign-In failed: Missing idToken. Please try again.", android.widget.Toast.LENGTH_LONG) } catch (_: Exception) {}
             }
             // Optionally, retry sign-in
             signInLauncher.launch(googleSignInClient.signInIntent)
@@ -921,7 +997,7 @@ class ScadaActivity : BaseActivity() {
                 } else {
                     Log.w("ScadaActivity", "Firebase authentication failed", task.exception)
                     runOnUiThread {
-                        android.widget.Toast.makeText(this, "Firebase authentication failed.", android.widget.Toast.LENGTH_LONG).show()
+                        try { ToastHelper.show(this, "Firebase authentication failed.", android.widget.Toast.LENGTH_LONG) } catch (_: Exception) {}
                     }
                 }
             }
@@ -1151,37 +1227,6 @@ class ScadaActivity : BaseActivity() {
             } catch (e: Exception) { android.util.Log.w("ScadaActivity", "Disable time picker failed", e) }
         }
 
-        // Wire preset spinners: liters and hours
-        val spinnerLiters = dialogView.findViewById<android.widget.Spinner?>(R.id.spinner_hourly_preset)
-        val spinnerHours = dialogView.findViewById<android.widget.Spinner?>(R.id.spinner_hourly_hours_preset)
-        try {
-            val literOptions = arrayOf("100 L", "250 L", "500 L", "1000 L")
-            val literAdapter = android.widget.ArrayAdapter(this, android.R.layout.simple_spinner_item, literOptions)
-            literAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-            spinnerLiters?.adapter = literAdapter
-            spinnerLiters?.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
-                override fun onItemSelected(parent: android.widget.AdapterView<*>, view: android.view.View?, position: Int, id: Long) {
-                    val text = literOptions[position]
-                    val num = text.split(" ").firstOrNull()?.toFloatOrNull() ?: return
-                    etWaterHourlyThreshold?.setText(String.format(Locale.getDefault(), "%.0f", num))
-                }
-                override fun onNothingSelected(parent: android.widget.AdapterView<*>) {}
-            }
-
-            val hourOptions = arrayOf("1 h", "2 h", "4 h", "8 h")
-            val hourAdapter = android.widget.ArrayAdapter(this, android.R.layout.simple_spinner_item, hourOptions)
-            hourAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-            spinnerHours?.adapter = hourAdapter
-            spinnerHours?.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
-                override fun onItemSelected(parent: android.widget.AdapterView<*>, view: android.view.View?, position: Int, id: Long) {
-                    val text = hourOptions[position]
-                    val num = text.split(" ").firstOrNull()?.toIntOrNull() ?: return
-                    etWaterHourlyHours?.setText(num.toString())
-                }
-                override fun onNothingSelected(parent: android.widget.AdapterView<*>) {}
-            }
-        } catch (_: Exception) {}
-
         // Load security schedule into dialog from appPrefs
         try {
             val seH = appPrefs.getInt("security_enable_hour", -1)
@@ -1190,6 +1235,18 @@ class ScadaActivity : BaseActivity() {
             val sdM = appPrefs.getInt("security_disable_min", 0)
             if (seH >= 0) btnEnableTime?.text = String.format(Locale.getDefault(), "%02d:%02d", seH, seM) else btnEnableTime?.text = getString(R.string.set_time)
             if (sdH >= 0) btnDisableTime?.text = String.format(Locale.getDefault(), "%02d:%02d", sdH, sdM) else btnDisableTime?.text = getString(R.string.set_time)
+        } catch (_: Exception) {}
+
+        // Add a checkbox toggle to allow enabling alarms when away from home network (opt-in)
+        val cbEnableWhenAway = dialogView.findViewById<android.widget.CheckBox?>(R.id.cb_enable_when_away)
+        try {
+            // Initialize checkbox state from appPrefs
+            val enabledWhenAway = appPrefs.getBoolean("security_enable_when_away", false)
+            if (cbEnableWhenAway != null) cbEnableWhenAway.isChecked = enabledWhenAway
+            // Persist changes when the checkbox is toggled
+            cbEnableWhenAway?.setOnCheckedChangeListener { _, isChecked ->
+                try { appPrefs.edit().putBoolean("security_enable_when_away", isChecked).apply() } catch (_: Exception) {}
+            }
         } catch (_: Exception) {}
 
         // Load current prefs into dialog fields (safe calls)
@@ -1273,12 +1330,12 @@ class ScadaActivity : BaseActivity() {
         // Appearance button handlers: reuse showColorPicker helper already present in the activity
         btnCardColor?.setOnClickListener {
             showColorPicker("card_scada_color", "Choose card background color") {
-                android.widget.Toast.makeText(this, "Card color saved", android.widget.Toast.LENGTH_SHORT).show()
+                try { ToastHelper.show(this, "Card color saved", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
             }
         }
         btnGraphColor?.setOnClickListener {
             showColorPicker("graph_background_color", "Choose graph background color") {
-                android.widget.Toast.makeText(this, "Graph color saved", android.widget.Toast.LENGTH_SHORT).show()
+                try { ToastHelper.show(this, "Graph color saved", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
             }
         }
 
@@ -1326,7 +1383,7 @@ class ScadaActivity : BaseActivity() {
                         val tv = dialogView.findViewById<TextView?>(resources.getIdentifier("recent_alarm_$i", "id", packageName))
                         tv?.text = getString(R.string.recent_alarm_empty, i)
                     }
-                    android.widget.Toast.makeText(this, "Alarm history cleared", android.widget.Toast.LENGTH_SHORT).show()
+                    try { ToastHelper.show(this@ScadaActivity, "Alarm history cleared", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
                 } catch (e: Exception) {
                     android.util.Log.w("ScadaActivity", "Failed to clear alarm history", e)
                 }
@@ -1373,7 +1430,7 @@ class ScadaActivity : BaseActivity() {
                 android.util.Log.w("ScadaActivity", "Failed to save app prefs", e)
             }
 
-            android.widget.Toast.makeText(this, "Alarm settings saved", android.widget.Toast.LENGTH_SHORT).show()
+            try { ToastHelper.show(this@ScadaActivity, "Alarm settings saved", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
             dialog.dismiss()
             updateAlarmStatus()
             applyLightsBackendSelection()
@@ -1387,7 +1444,7 @@ class ScadaActivity : BaseActivity() {
                     // update buttons to default label
                     dialogView.findViewById<android.widget.Button?>(R.id.btn_security_enable_time)?.text = getString(R.string.set_time)
                     dialogView.findViewById<android.widget.Button?>(R.id.btn_security_disable_time)?.text = getString(R.string.set_time)
-                    android.widget.Toast.makeText(this, "Security schedule cleared", android.widget.Toast.LENGTH_SHORT).show()
+                    try { ToastHelper.show(this@ScadaActivity, "Security schedule cleared", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
                 } catch (e: Exception) { android.util.Log.w("ScadaActivity", "Failed clearing security schedule", e) }
             }
         } catch (_: Exception) {}
@@ -1420,7 +1477,7 @@ class ScadaActivity : BaseActivity() {
                 }
             } catch (e: Exception) {
                 android.util.Log.e("ScadaActivity", "Failed to play preview tone", e)
-                android.widget.Toast.makeText(this, "Unable to play tone", android.widget.Toast.LENGTH_SHORT).show()
+                try { ToastHelper.show(this@ScadaActivity, "Unable to play tone", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
                 try { previewPlayer?.release() } catch (_: Exception) {}
                 previewPlayer = null
                 btnPlayTone.text = getString(R.string.play_tone)
@@ -1474,10 +1531,10 @@ class ScadaActivity : BaseActivity() {
                     notificationManager.createNotificationChannel(secChannel)
                 }
 
-                android.widget.Toast.makeText(this, "Alarm channels reset (default silent, security audible)", android.widget.Toast.LENGTH_SHORT).show()
+                try { ToastHelper.show(this@ScadaActivity, "Alarm channels reset (default silent, security audible)", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
             } catch (e: Exception) {
                 android.util.Log.e("ScadaActivity", "Failed to reset alarm channels", e)
-                android.widget.Toast.makeText(this, "Failed to reset channels", android.widget.Toast.LENGTH_SHORT).show()
+                try { ToastHelper.show(this@ScadaActivity, "Failed to reset channels", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
             }
         }
 
@@ -1505,16 +1562,16 @@ class ScadaActivity : BaseActivity() {
                         else -> "firebase"
                     }
                     appPrefs.edit { putString("lights_control_backend", selected) }
-                    android.widget.Toast.makeText(this, getString(R.string.lights_backend_saved, selected), android.widget.Toast.LENGTH_SHORT).show()
+                    try { ToastHelper.show(this@ScadaActivity, getString(R.string.lights_backend_saved, selected), android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
                     applyLightsBackendSelection()
                 } catch (e: Exception) {
                     Log.w("ScadaActivity", "Failed saving backend", e)
-                    android.widget.Toast.makeText(this, "Failed to save backend", android.widget.Toast.LENGTH_SHORT).show()
+                    try { ToastHelper.show(this@ScadaActivity, "Failed to save backend", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
                 }
             }
             btnReloadBackend.setOnClickListener {
                 try {
-                    android.widget.Toast.makeText(this, "Reloading backend selection...", android.widget.Toast.LENGTH_SHORT).show()
+                    try { ToastHelper.show(this@ScadaActivity, "Reloading backend selection...", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
                     applyLightsBackendSelection()
                 } catch (e: Exception) {
                     Log.w("ScadaActivity", "Failed reloading backend", e)
@@ -1621,7 +1678,7 @@ class ScadaActivity : BaseActivity() {
                         if (triggeredByUser) {
                             val gwText = gateway ?: "unknown"
                             val msg = "Gateway: $gwText — $text"
-                            try { android.widget.Toast.makeText(this@ScadaActivity, msg, android.widget.Toast.LENGTH_SHORT).show() } catch (_: Exception) {}
+                            try { ToastHelper.show(this@ScadaActivity, msg, android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
                         } else {
                             // no-op else branch to ensure `if` is not treated as an expression missing an else
                         }
@@ -1887,7 +1944,7 @@ class ScadaActivity : BaseActivity() {
                 .setPositiveButton("Save") { _, _ ->
                     val storm = stormInput.text.toString().trim()
                     prefs.edit { putString("stormglass_api_key", storm) }
-                    android.widget.Toast.makeText(this, "Stormglass key saved", android.widget.Toast.LENGTH_SHORT).show()
+                    try { ToastHelper.show(this@ScadaActivity, "Stormglass key saved", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
                 }
                 .setNegativeButton("Cancel", null)
                 .show()
@@ -2024,6 +2081,56 @@ class ScadaActivity : BaseActivity() {
         val dt = timeMillis.toDouble() / 1000.0
         val jd = dt / 86400.0 + 2440587.5
         return jd
+    }
+
+    // Debug helper — dumps current auth token/claims and attempts a safe test write to diagnostics/test_client_write
+    fun debugFirestoreAuthAndWrite() {
+        try {
+            val user = auth.currentUser
+            android.util.Log.d("ScadaDebug", "currentUser uid=${'$'}{user?.uid} email=${'$'}{user?.email} displayName=${'$'}{user?.displayName}")
+
+            user?.getIdToken(true)?.addOnSuccessListener { result ->
+                val token = result.token
+                android.util.Log.d("ScadaDebug", "ID token (truncated): ${'$'}{token?.take(256)}")
+                try { android.util.Log.d("ScadaDebug", "Token claims: ${'$'}{result.claims}") } catch (_: Exception) {}
+            }?.addOnFailureListener { e ->
+                android.util.Log.w("ScadaDebug", "Failed to get ID token", e)
+            }
+
+            val testDoc = FirebaseFirestore.getInstance().collection("diagnostics").document("test_client_write")
+            val payload = hashMapOf<String, Any>(
+                "by" to (user?.email ?: user?.uid ?: "unknown"),
+                "ts" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                "note" to "client debug write"
+            )
+            testDoc.set(payload)
+                .addOnSuccessListener {
+                    android.util.Log.i("ScadaDebug", "Test write succeeded")
+                }
+                .addOnFailureListener { e ->
+                    android.util.Log.e("ScadaDebug", "Test write FAILED", e)
+                    if (e is com.google.firebase.firestore.FirebaseFirestoreException) {
+                        android.util.Log.e("ScadaDebug", "FirestoreException: code=${'$'}{e.code} msg=${'$'}{e.message}")
+                    }
+                }
+        } catch (e: Exception) {
+            android.util.Log.e("ScadaDebug", "debugFirestoreAuthAndWrite failed", e)
+        }
+    }
+
+    // Auto-invoke debug helper in debug builds (deferred to allow onCreate to initialize Firebase)
+    fun autoInvokeDebugIfNeeded() {
+        try {
+            val isDebuggable = try {
+                (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+            } catch (_: Exception) { false }
+            if (isDebuggable) {
+                android.util.Log.d("ScadaDebug", "Scheduling auto-invoke debugFirestoreAuthAndWrite() (debuggable app)")
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    try { debugFirestoreAuthAndWrite() } catch (_: Exception) {}
+                }, 2000)
+            }
+        } catch (_: Exception) {}
     }
 
 }

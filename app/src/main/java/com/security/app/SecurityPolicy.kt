@@ -9,7 +9,7 @@ object SecurityPolicy {
      * Decide whether security alarms should trigger based on the following precedence:
      * 1) forceOff -> false
      * 2) forceOn -> true
-     * 3) presence: if not at home -> true
+     * 3) presence: controlled by enableWhenAway -> if not at home and enableWhenAway==true -> true
      * 4) enabled flag + schedule -> true/false
      *
      * scheduleStartMinutes and scheduleEndMinutes are minutes-since-midnight values; if either is null, schedule is treated as always enabled.
@@ -19,14 +19,17 @@ object SecurityPolicy {
         forceOn: Boolean,
         forceOff: Boolean,
         isAtHome: Boolean,
+        enableWhenAway: Boolean,
         scheduleStartMinutes: Int?,
         scheduleEndMinutes: Int?
     ): Boolean {
         if (forceOff) return false
         if (forceOn) return true
         if (!enabled) return false
-        // presence-based override: not at home => enable
-        if (!isAtHome) return true
+
+        // Presence-based behavior is now controlled by the explicit enableWhenAway flag.
+        // If the user has opted-in to enable alarms when away, then not-at-home -> true; otherwise respect schedule.
+        if (!isAtHome) return enableWhenAway
 
         // schedule
         if (scheduleStartMinutes == null || scheduleEndMinutes == null) return true
@@ -43,4 +46,3 @@ object SecurityPolicy {
         }
     }
 }
-
