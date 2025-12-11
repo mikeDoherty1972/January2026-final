@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Home SCADA - Web Prototype</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <header class="app-bar">
+    <div class="app-bar-inner">
+      <div class="app-icon">🏠</div>
+      <div class="app-title">
+        <div class="title">Home SCADA</div>
+        <div class="subtitle">Web prototype</div>
+      </div>
+      <div class="spacer"></div>
+      <div class="app-actions">
+        <a class="btn" href="./pages/security.html">Security</a>
+        <button id="open-readme" class="icon-btn" title="Readme"><span class="material-icons">info</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container launcher-full">
+    <section class="hero-card card">
+      <div class="hero-inner">
+        <div class="hero-icon">🏠</div>
+        <h1 class="hero-title">Home Automation Hub</h1>
+        <div id="last-update" class="hero-sub">Last Update: --:--:--</div>
+      </div>
+    </section>
+
+    <section class="cams-side card">
+      <div class="card-header"><span class="material-icons card-icon">photo_camera</span><h2>Cameras</h2></div>
+      <div class="cams">
+        <div class="cam">
+          <img src="https://drive.google.com/uc?export=view&id=1Ngq-uxaXuoHFySX-ynU1vwafeRh5InU5" alt="Door camera" />
+          <div class="caption">Door camera</div>
+          <a href="https://drive.google.com/file/d/1Ngq-uxaXuoHFySX-ynU1vwafeRh5InU5/view?usp=drive_link" target="_blank" rel="noopener" class="muted">Open in Drive</a>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Bottom app buttons (Android style) -->
+  <nav class="app-launcher-bottom" aria-label="launcher">
+    <a class="app-btn btn-sec" href="./pages/security.html">Security</a>
+    <a class="app-btn btn-scada" href="./pages/scada.html">SCADA</a>
+    <a class="app-btn btn-ids" href="./pages/alerts.html">IDS</a>
+    <a class="app-btn btn-iperl" href="./pages/iperl.html">IPERL</a>
+  </nav>
+
+  <footer class="app-footer">
+    <small>Prototype generated from parts of the Android project. Use the JSON loader to import app data (DVR/IPERL) for a faithful view.</small>
+  </footer>
+
+  <!-- Ensure scada code is available so init-dashboard can call fetchAll -->
+  <script src="./js/scada.js"></script>
+  <script src="./js/init-dashboard.js"></script>
+  <script src="./js/index-populate.js"></script>
+  <script src="./js/launcher.js"></script>
+  <script src="./js/debug-panel.js"></script>
+</body>
+</html>

@@ -1237,17 +1237,9 @@ class ScadaActivity : BaseActivity() {
             if (sdH >= 0) btnDisableTime?.text = String.format(Locale.getDefault(), "%02d:%02d", sdH, sdM) else btnDisableTime?.text = getString(R.string.set_time)
         } catch (_: Exception) {}
 
-        // Add a checkbox toggle to allow enabling alarms when away from home network (opt-in)
-        val cbEnableWhenAway = dialogView.findViewById<android.widget.CheckBox?>(R.id.cb_enable_when_away)
-        try {
-            // Initialize checkbox state from appPrefs
-            val enabledWhenAway = appPrefs.getBoolean("security_enable_when_away", false)
-            if (cbEnableWhenAway != null) cbEnableWhenAway.isChecked = enabledWhenAway
-            // Persist changes when the checkbox is toggled
-            cbEnableWhenAway?.setOnCheckedChangeListener { _, isChecked ->
-                try { appPrefs.edit().putBoolean("security_enable_when_away", isChecked).apply() } catch (_: Exception) {}
-            }
-        } catch (_: Exception) {}
+        // NOTE: previously there was a direct `findViewById(R.id.cb_enable_when_away)` here which caused unresolved-reference
+        // and later duplicate declarations; that code has been removed so the safer resource.getIdentifier-based lookup
+        // (declared below) is the single source of the optional checkbox reference.
 
         // Load current prefs into dialog fields (safe calls)
         try { etLowPressure?.setText(prefs.getFloat("low_pressure_threshold", 1.0f).toString()) } catch (_: Exception) {}
@@ -1257,6 +1249,14 @@ class ScadaActivity : BaseActivity() {
         try { etDvrMinutes?.setText((prefs.getLong("dvr_stale_minutes", 60L)).toString()) } catch (_: Exception) {}
         try { etWaterHourlyThreshold?.setText(prefs.getFloat("water_hourly_volume_threshold", 500f).toString()) } catch (_: Exception) {}
         try { etWaterHourlyHours?.setText(prefs.getInt("water_hourly_window_hours", 1).toString()) } catch (_: Exception) {}
+
+        // Resolve optional spinner and checkbox IDs via resources.getIdentifier so missing layout elements are tolerated
+        val spinnerLiters = dialogView.findViewById<android.widget.Spinner?>(resources.getIdentifier("spinner_hourly_preset", "id", packageName))
+        val spinnerHours = dialogView.findViewById<android.widget.Spinner?>(resources.getIdentifier("spinner_hourly_hours_preset", "id", packageName))
+        val cbEnableWhenAway = run {
+            val id = resources.getIdentifier("cb_enable_when_away", "id", packageName)
+            if (id != 0) dialogView.findViewById<android.widget.CheckBox?>(id) else null
+        }
 
         // Ensure spinner choices and radio group reflect the saved values (avoid showing defaults)
         try {

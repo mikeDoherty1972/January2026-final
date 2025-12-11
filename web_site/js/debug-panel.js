@@ -20,11 +20,30 @@
     function applyRows(rows){
       if(!rows || !rows.length) return;'use strict';
       try{
+        // Special-case: if the sheet rows use letter keys like A,B,C... (Android export), use direct mapping
+        const firstRowKeys = Object.keys(rows[0] || {});
+        const isLetterColumns = firstRowKeys.length && firstRowKeys.every(k => /^[A-Z]$/.test(k));
         let headerRow = rows[0];
         let dataRows = rows.slice(1);
-        const headerVals = Object.values(headerRow).map(v=> String(v||'').toLowerCase());
-        const looksLikeHeader = headerVals.some(v=> /time|temp|water|dvr|wind|geyser|amps|kw|tide/i.test(v));
-        if(!looksLikeHeader){ headerRow = {}; const first = rows[0]; Object.keys(first).forEach((k,i)=> headerRow[k]=k); dataRows = rows; }
+        if(isLetterColumns){
+          // Map known columns for your Android sheet
+          // A: TheTime, B: temp in, C: temp out, D: humidity, E: wind speed, F: geyser temp,
+          // G: water pressure, H: kw, I: amps, J: kw daily, K: water, L: water daily, M: wind direction, N: dvr temp
+          const letterMap = { A: 'thetime', B: 'temp in', C: 'temp out', D: 'humidity', E: 'wind speed', F: 'geyser temp', G: 'water pressure', H: 'kw', I: 'amps', J: 'kw daily', K: 'water', L: 'water daily', M: 'wind direction', N: 'dvr temp' };
+          // Build a normalized headerRow mapping to use later
+          headerRow = {};
+          Object.keys(letterMap).forEach(letter => { headerRow[letter] = letterMap[letter]; });
+          dataRows = rows.slice(1).map(r => {
+            // convert arrays like {A: '12/03/25...', B:'24.0', ...} into same object shape
+            const obj = {};
+            Object.keys(r).forEach(k => obj[k] = r[k]);
+            return obj;
+          });
+        } else {
+          const headerVals = Object.values(headerRow).map(v=> String(v||'').toLowerCase());
+          const looksLikeHeader = headerVals.some(v=> /time|temp|water|dvr|wind|geyser|amps|kw|tide/i.test(v));
+          if(!looksLikeHeader){ headerRow = {}; const first = rows[0]; Object.keys(first).forEach((k,i)=> headerRow[k]=k); dataRows = rows; }
+        }
         const colMap = {}; Object.keys(headerRow).forEach(k=>{ const v = String(headerRow[k]||'').trim().toLowerCase(); colMap[k]=v; });
         const findKey = (re)=> Object.keys(colMap).find(k=> colMap[k] && re.test(colMap[k]));
         const tsKey = findKey(/time|date|timestamp|thetime/);

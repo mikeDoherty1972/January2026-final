@@ -509,17 +509,25 @@ class SecurityActivity : BaseActivity() {
 
     private fun setupCameraClickListeners() {
         // Full list of Drive image URLs (nullable so missing cameras show a friendly message)
-        val imageUrls: Map<String, String?> = mapOf(
+        // These are defaults; the user can override any of them by setting SharedPreferences keys like "camera_door_url"
+        val defaults: Map<String, String?> = mapOf(
             "garage" to "https://drive.google.com/uc?export=download&id=1i7yQEZAIEwjB1aYfN0jKUwVdOKhL2uBr",
             "garage_side" to "https://drive.google.com/uc?export=download&id=1mZTC_6Nb4thZAQvH4bafJVwO6p8yB6KH",
             "south" to "https://drive.google.com/uc?export=download&id=1Fw9dvmwaWkw8RjCi18Zr_fUdXzN5MApw",
-            // Updated IDs provided by user (converted from share links to uc?export=download form)
             "back" to "https://drive.google.com/uc?export=download&id=1D-RC21Z5p9atX1xTle31uDlA1dgqAAJ-",
             "north" to "https://drive.google.com/uc?export=download&id=1uPhu1YBPCTVtDog8a7TdTOt8zI2x3s_L",
             "front" to "https://drive.google.com/uc?export=download&id=1aGcQTvdpYNsmUNOLN-4TFruxk7MTu-wg",
-            // Door currently not configured with an image (null). You can update these later.
-            "door" to null
+            // Door default: use the user-provided Drive file (converted to direct-download form)
+            "door" to "https://drive.google.com/uc?export=download&id=1Ngq-uxaXuoHFySX-ynU1vwafeRh5InU5"
         )
+
+        // Allow overrides from shared prefs: keys of the form camera_<key>_url, e.g. camera_door_url
+        val prefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+        val imageUrls = defaults.mapValues { (key, defaultVal) ->
+            val prefKey = "camera_${key}_url"
+            val fromPref = prefs.getString(prefKey, null)
+            if (!fromPref.isNullOrBlank()) fromPref else defaultVal
+        }
 
         fun openOrNotify(urlKey: String, zoneName: String) {
             val url = imageUrls[urlKey]
@@ -540,6 +548,37 @@ class SecurityActivity : BaseActivity() {
         findViewById<CardView>(R.id.northCard).setOnClickListener { openOrNotify("north", "North") }
         findViewById<CardView>(R.id.frontCard).setOnClickListener { openOrNotify("front", "Front") }
         findViewById<CardView>(R.id.doorCard).setOnClickListener { openOrNotify("door", "Door") }
+        // Long-press the Door card to set or remove a camera URL (saved in prefs as camera_door_url)
+        try {
+            val doorCardView = findViewById<CardView?>(R.id.doorCard)
+            doorCardView?.setOnLongClickListener {
+                try {
+                    val prefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+                    val current = prefs.getString("camera_door_url", "") ?: ""
+                    val edit = android.widget.EditText(this@SecurityActivity)
+                    edit.setText(current)
+                    edit.hint = "https://..."
+                    val dlg = AlertDialog.Builder(this@SecurityActivity)
+                        .setTitle("Door camera URL")
+                        .setView(edit)
+                        .setPositiveButton("Save") { _, _ ->
+                            val v = edit.text.toString().trim()
+                            if (v.isNotEmpty()) prefs.edit().putString("camera_door_url", v).apply() else prefs.edit().remove("camera_door_url").apply()
+                            try { ToastHelper.show(this@SecurityActivity, "Door camera URL saved", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
+                        }
+                        .setNeutralButton("Remove") { _, _ ->
+                            prefs.edit().remove("camera_door_url").apply()
+                            try { ToastHelper.show(this@SecurityActivity, "Door camera URL removed", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
+                        }
+                        .setNegativeButton("Cancel", null)
+                    dlg.show()
+                } catch (e: Exception) {
+                    Log.w("SecurityActivity", "Failed to show door URL dialog", e)
+                    try { ToastHelper.show(this@SecurityActivity, "Unable to edit URL", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
+                }
+                true
+            }
+        } catch (_: Exception) {}
     }
 
     private fun openImageView(imageUrl: String?, forceReload: Boolean = false) {

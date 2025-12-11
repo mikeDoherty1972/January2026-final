@@ -137,7 +137,7 @@ class MainActivity : BaseActivity() {
     private fun refreshData() {
         listenForSensorUpdates()
         GraphDataRepository.preLoadAllGraphData()
-        Toast.makeText(this, "Data refreshed", Toast.LENGTH_SHORT).show()
+        try { ToastHelper.show(this, "Data refreshed", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
     }
 
     // New helper: pick a color and apply to all four main dashboard cards
@@ -287,7 +287,7 @@ class MainActivity : BaseActivity() {
                 Log.w("FCM", "Fetching FCM registration token failed", task.exception)
                 // Show explicit toast so user/dev sees failure
                 runOnUiThread {
-                    Toast.makeText(this, "FCM token fetch failed: ${task.exception?.localizedMessage ?: "Unknown error"}", Toast.LENGTH_LONG).show()
+                    try { ToastHelper.show(this, "FCM token fetch failed: ${task.exception?.localizedMessage ?: "Unknown error"}", android.widget.Toast.LENGTH_LONG) } catch (_: Exception) {}
                 }
                 return@addOnCompleteListener
             }
@@ -299,7 +299,7 @@ class MainActivity : BaseActivity() {
             if (token.isNullOrEmpty()) {
                 Log.w("FCM", "FCM token is null or empty")
                 runOnUiThread {
-                    Toast.makeText(this, "FCM token empty", Toast.LENGTH_LONG).show()
+                    try { ToastHelper.show(this, "FCM token empty", android.widget.Toast.LENGTH_LONG) } catch (_: Exception) {}
                 }
                 return@addOnCompleteListener
             }
@@ -310,12 +310,12 @@ class MainActivity : BaseActivity() {
 
                 // Show token in UI for debugging
                 runOnUiThread {
-                    Toast.makeText(this, "FCM Token saved", Toast.LENGTH_SHORT).show()
+                    try { ToastHelper.show(this, "FCM Token saved", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
                 }
             } catch (e: Exception) {
                 Log.e("FCM", "Exception while saving token", e)
                 runOnUiThread {
-                    Toast.makeText(this, "FCM save failed: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                    try { ToastHelper.show(this, "FCM save failed: ${e.localizedMessage}", android.widget.Toast.LENGTH_LONG) } catch (_: Exception) {}
                 }
             }
         }
@@ -639,8 +639,8 @@ class MainActivity : BaseActivity() {
             "timestamp" to com.google.firebase.Timestamp.now()
         )
         updateStatusBlocks(testData)
-        android.widget.Toast.makeText(this, "Security Alarm Test - Motion Detected", android.widget.Toast.LENGTH_SHORT).show()
-        
+        try { ToastHelper.show(this, "Security Alarm Test - Motion Detected", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
+
         // Reset after 5 seconds
         android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
             val normalData = mapOf(
@@ -661,8 +661,8 @@ class MainActivity : BaseActivity() {
             "timestamp" to com.google.firebase.Timestamp.now()
         )
         updateStatusBlocks(testData)
-        android.widget.Toast.makeText(this, "SCADA Alarm Test - High Temperature", android.widget.Toast.LENGTH_SHORT).show()
-        
+        try { ToastHelper.show(this, "SCADA Alarm Test - High Temperature", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
+
         // Reset after 5 seconds
         android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
             val normalData = mapOf(
@@ -683,8 +683,8 @@ class MainActivity : BaseActivity() {
             "timestamp" to com.google.firebase.Timestamp.now()
         )
         updateStatusBlocks(testData)
-        android.widget.Toast.makeText(this, "IDS Alarm Test - Threats Detected", android.widget.Toast.LENGTH_SHORT).show()
-        
+        try { ToastHelper.show(this, "IDS Alarm Test - Threats Detected", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
+
         // Reset after 5 seconds
         android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
             val normalData = mapOf(
@@ -704,8 +704,8 @@ class MainActivity : BaseActivity() {
             "timestamp" to com.google.firebase.Timestamp.now()
         )
         updateStatusBlocks(testData)
-        android.widget.Toast.makeText(this, "IPERL Alarm Test - Water Pressure Low", android.widget.Toast.LENGTH_SHORT).show()
-        
+        try { ToastHelper.show(this, "IPERL Alarm Test - Water Pressure Low", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
+
         // Reset after 5 seconds
         android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
             val normalData = mapOf(

@@ -1,0 +1,120 @@
+body {
+  background-color: #f4f7f6;
+  color: #333;
+  font-family: sans-serif;
+  margin: 0;
+}
+
+.app-bar {
+  background-color: #00796b; /* A bright teal color */
+  color: #fff;
+  padding: 1rem;
+  border-bottom: 1px solid #ddd;
+}
+
+.app-bar-inner {
+  display: flex;
+  align-items: center;
+}
+
+.app-icon {
+  font-size: 1.5rem;
+  text-decoration: none;
+  color: #fff;
+  margin-right: 1rem;
+}
+
+.app-title {
+  font-size: 1.2rem;
+  font-weight: bold;
+}
+
+.spacer {
+  flex-grow: 1;
+}
+
+.app-bar-nav a {
+  color: #fff;
+  text-decoration: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  transition: background-color 0.3s;
+}
+
+.app-bar-nav a:hover {
+    background-color: #004d40;
+}
+
+.app-bar-nav a.active {
+  background-color: #009688;
+}
+
+.container {
+  padding: 1rem;
+}
+
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1rem;
+}
+
+.card {
+  background-color: #fff;
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.chart-container {
+    position: relative;
+    height: 300px;
+    width: 100%;
+}
+
+h2 {
+  margin-top: 0;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 0.5rem;
+  font-size: 1.2rem;
+  color: #00796b;
+}
+
+.app-footer {
+  padding: 1rem;
+  text-align: center;
+  font-size: 0.8rem;
+  color: #888;
+}
+
+/* --- Dashboard Specific --- */
+.dashboard-card-value {
+    font-size: 2rem;
+    font-weight: bold;
+    color: #004d40;
+    margin-bottom: 0.5rem;
+}
+
+.wind-display {
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+}
+
+.wind-barb {
+    font-size: 4rem;
+    color: #00796b;
+    transition: transform 0.5s ease-out;
+}
+
+/* --- Security Specific --- */
+.grid-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 1rem;
+}
+
+.zone-card { text-align: center; }
+.status-clear { color: #4CAF50; }
+.status-motion { color: #FFC107; }
+.status-breach { color: #F44336; font-weight: bold; }

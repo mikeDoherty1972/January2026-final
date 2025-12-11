@@ -38,10 +38,10 @@ class IDSActivity : BaseActivity() {
             builder.setItems(options) { _, which ->
                 when (which) {
                     0 -> showColorPicker("card_ids_color", "Choose IDS card color") {
-                        android.widget.Toast.makeText(this, "IDS card color saved. Return to dashboard to see change.", android.widget.Toast.LENGTH_SHORT).show()
+                        try { ToastHelper.show(this@IDSActivity, "IDS card color saved. Return to dashboard to see change.", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
                     }
                     1 -> showColorPicker("graph_background_color", "Choose IDS graph background") {
-                        android.widget.Toast.makeText(this, "IDS graph background saved.", android.widget.Toast.LENGTH_SHORT).show()
+                        try { ToastHelper.show(this@IDSActivity, "IDS graph background saved.", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
                     }
                 }
             }

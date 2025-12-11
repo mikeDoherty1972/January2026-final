@@ -5,7 +5,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import android.widget.Toast
 
 class NotificationActionReceiver : BroadcastReceiver() {
     
@@ -21,9 +20,9 @@ class NotificationActionReceiver : BroadcastReceiver() {
                 val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                 notificationManager.cancel(notificationId)
                 
-                // Show acknowledgment message
-                Toast.makeText(context, "Alarm acknowledged", Toast.LENGTH_SHORT).show()
-                
+                // Show acknowledgment message using ToastHelper
+                try { ToastHelper.show(context, "Alarm acknowledged", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
+
                 Log.d("NotificationAction", "Notification $notificationId dismissed")
             }
         }

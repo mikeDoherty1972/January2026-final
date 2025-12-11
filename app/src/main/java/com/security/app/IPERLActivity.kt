@@ -59,10 +59,10 @@ class IPERLActivity : BaseActivity() {
             builder.setItems(options) { _, which ->
                 when (which) {
                     0 -> showColorPicker("card_iperl_color", "Choose IPERL card color") {
-                        android.widget.Toast.makeText(this, "IPERL card color saved. Return to dashboard to see change.", android.widget.Toast.LENGTH_SHORT).show()
+                        try { ToastHelper.show(this@IPERLActivity, "IPERL card color saved. Return to dashboard to see change.", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
                     }
                     1 -> showColorPicker("graph_background_color", "Choose IPERL graph background") {
-                        android.widget.Toast.makeText(this, "IPERL graph background saved.", android.widget.Toast.LENGTH_SHORT).show()
+                        try { ToastHelper.show(this@IPERLActivity, "IPERL graph background saved.", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
                     }
                 }
             }

@@ -52,6 +52,23 @@ class NotificationService : Service() {
         sheetsReader = GoogleSheetsReader()
         // Notification channels are created centrally in App.onCreate() to avoid race
         // conditions and duplicated channel recreation. No-op here.
+
+        // Sync last DVR pulse from persistent prefs so service doesn't treat a freshly-updated UI
+        // pulse as stale when it starts or resumes.
+        try {
+            val prefs = getSharedPreferences("alarm_prefs", Context.MODE_PRIVATE)
+            if (prefs.contains("last_dvr_pulse_time_ms") && prefs.contains("last_dvr_pulse_value")) {
+                val storedTime = prefs.getLong("last_dvr_pulse_time_ms", 0L)
+                val storedVal = prefs.getFloat("last_dvr_pulse_value", 0f).toDouble()
+                if (storedTime > 0L) {
+                    lastDvrPulse = storedVal
+                    lastDvrPulseTime = storedTime
+                    android.util.Log.d("NotificationService", "Loaded persisted lastDvrPulse=$lastDvrPulse lastDvrPulseTime=$lastDvrPulseTime from prefs")
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("NotificationService", "Failed reading persisted last DVR pulse", e)
+        }
     }
 
     private suspend fun loadLatestReading(): GoogleSheetsReader.SensorReading? {
@@ -142,6 +159,23 @@ class NotificationService : Service() {
             val dvrStaleMinutes = prefs.getLong("dvr_stale_minutes", DEFAULT_DVR_STALE_MINUTES)
 
             val latestReading = loadLatestReading()
+
+            // Re-sync persisted DVR pulse/time in case UI (ScadaActivity) updated it while the service is running.
+            try {
+                val alarmPrefs = getSharedPreferences("alarm_prefs", Context.MODE_PRIVATE)
+                if (alarmPrefs.contains("last_dvr_pulse_time_ms") && alarmPrefs.contains("last_dvr_pulse_value")) {
+                    val storedTime = alarmPrefs.getLong("last_dvr_pulse_time_ms", 0L)
+                    val storedVal = alarmPrefs.getFloat("last_dvr_pulse_value", 0f).toDouble()
+                    if (storedTime > lastDvrPulseTime) {
+                        lastDvrPulseTime = storedTime
+                        lastDvrPulse = storedVal
+                        android.util.Log.d("NotificationService", "Resynced lastDvrPulse from prefs: $lastDvrPulse at $lastDvrPulseTime")
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("NotificationService", "Failed to resync last DVR pulse from prefs", e)
+            }
+
             if (latestReading != null) {
                 // Check low water pressure
                 if (latestReading.waterPressure.toDouble() < lowPressure) {
@@ -171,6 +205,13 @@ class NotificationService : Service() {
                 if (lastDvrPulse == null) {
                     lastDvrPulse = pulseVal
                     lastDvrPulseTime = System.currentTimeMillis()
+                    // persist initial pulse so UI and other processes can see it
+                    try {
+                        val alarmPrefs = getSharedPreferences("alarm_prefs", Context.MODE_PRIVATE)
+                        alarmPrefs.edit().putFloat("last_dvr_pulse_value", lastDvrPulse!!.toFloat()).putLong("last_dvr_pulse_time_ms", lastDvrPulseTime).apply()
+                    } catch (e: Exception) {
+                        android.util.Log.w("NotificationService", "Failed to persist initial last DVR pulse", e)
+                    }
                 } else {
                     val changed = kotlin.math.abs(pulseVal - lastDvrPulse!!) > tol
                     if (!changed) {
@@ -180,10 +221,23 @@ class NotificationService : Service() {
                             sendNotification("DVR Stale Pulse Alert", "DVR pulse has not changed in $minutesElapsed minutes (configured $dvrStaleMinutes minutes).", false)
                             // reset timer to avoid repeated notifications
                             lastDvrPulseTime = System.currentTimeMillis()
+                            try {
+                                val alarmPrefs = getSharedPreferences("alarm_prefs", Context.MODE_PRIVATE)
+                                alarmPrefs.edit().putLong("last_dvr_pulse_time_ms", lastDvrPulseTime).apply()
+                            } catch (e: Exception) {
+                                android.util.Log.w("NotificationService", "Failed to persist last DVR pulse time after stale alert", e)
+                            }
                         }
                     } else {
                         lastDvrPulse = pulseVal
                         lastDvrPulseTime = System.currentTimeMillis()
+                        // persist updated pulse so UI and other processes can see it
+                        try {
+                            val alarmPrefs = getSharedPreferences("alarm_prefs", Context.MODE_PRIVATE)
+                            alarmPrefs.edit().putFloat("last_dvr_pulse_value", lastDvrPulse!!.toFloat()).putLong("last_dvr_pulse_time_ms", lastDvrPulseTime).apply()
+                        } catch (e: Exception) {
+                            android.util.Log.w("NotificationService", "Failed to persist updated last DVR pulse", e)
+                        }
                     }
                 }
             }

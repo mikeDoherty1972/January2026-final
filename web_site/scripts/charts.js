@@ -18,7 +18,7 @@ const cameraUrls = {
     "back": "https://drive.google.com/uc?export=download&id=1D-RC21Z5p9atX1xTle31uDlA1dgqAAJ-",
     "north": "https://drive.google.com/uc?export=download&id=1uPhu1YBPCTVtDog8a7TdTOt8zI2x3s_L",
     "front": "https://drive.google.com/uc?export=download&id=1aGcQTvdpYNsmUNOLN-4TFruxk7MTu-wg",
-    "door": null
+    "door": "https://drive.google.com/uc?export=view&id=1Ngq-uxaXuoHFySX-ynU1vwafeRh5InU5"
 };
 
 let securityActivityCache = [];
@@ -52,6 +52,84 @@ function listenForSecurityUpdates() {
     });
 }
 
+function ensureCameraModal() {
+    if (document.getElementById('camera-modal')) return;
+    const modal = document.createElement('div');
+    modal.id = 'camera-modal';
+    modal.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:100%;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;z-index:9999;visibility:hidden;opacity:0;transition:opacity .18s ease';
+    modal.innerHTML = `
+      <div id="camera-modal-inner" style="max-width:95%;max-height:95%;background:transparent;border-radius:6px;overflow:auto;">
+         <img id="camera-modal-img" src="" alt="Camera" style="max-width:100%;max-height:100%;display:none;border-radius:4px;box-shadow:0 8px 24px rgba(0,0,0,0.6);background:#222" />
+         <iframe id="camera-modal-iframe" src="" frameborder="0" style="width:90vw;height:80vh;display:none;border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,0.6);background:#000"></iframe>
+         <div id="camera-modal-caption" style="color:#fff;text-align:center;margin-top:8px;font-weight:500"></div>
+      </div>
+    `;
+    modal.addEventListener('click', (e) => {
+        const inner = document.getElementById('camera-modal-inner');
+        if (!inner.contains(e.target)) hideCameraModal();
+    });
+    document.body.appendChild(modal);
+    // close on Esc
+    window.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideCameraModal(); });
+}
+
+// Return Drive preview iframe URL for a given Drive URL or id
+function drivePreviewUrl(url) {
+    try {
+        if (!url) return null;
+        // If it's already a preview URL
+        if (url.indexOf('drive.google.com') === -1) return null;
+        // extract id
+        const m = url.match(/\/d\/([-_A-Za-z0-9]+)(?:\/|\/view|$)/);
+        if (m && m[1]) return `https://drive.google.com/file/d/${m[1]}/preview`;
+        const idMatch = url.match(/[?&]id=([-_A-Za-z0-9]+)/);
+        if (idMatch && idMatch[1]) return `https://drive.google.com/file/d/${idMatch[1]}/preview`;
+        // if uc?id=ID
+        const ucMatch = url.match(/id=([-_A-Za-z0-9]+)/);
+        if (ucMatch && ucMatch[1]) return `https://drive.google.com/file/d/${ucMatch[1]}/preview`;
+        return null;
+    } catch (e) { console.warn('drivePreviewUrl failed', e); return null; }
+}
+
+function showCameraModal(url, caption) {
+    try {
+        ensureCameraModal();
+        const modal = document.getElementById('camera-modal');
+        const img = document.getElementById('camera-modal-img');
+        const iframe = document.getElementById('camera-modal-iframe');
+        const cap = document.getElementById('camera-modal-caption');
+        const nurl = normalizeDriveUrl(url) || url;
+        // If the URL is a Drive URL, prefer the Drive preview iframe to avoid download behavior
+        const dp = drivePreviewUrl(nurl);
+        if (dp) {
+            // show iframe
+            img.style.display = 'none';
+            iframe.style.display = 'block';
+            iframe.src = dp;
+        } else {
+            // show image tag
+            iframe.style.display = 'none';
+            iframe.src = 'about:blank';
+            img.style.display = 'block';
+            img.src = nurl;
+        }
+        cap.textContent = caption || '';
+        modal.style.visibility = 'visible';
+        modal.style.opacity = '1';
+    } catch (e) { console.warn('showCameraModal failed', e); window.open(url, '_blank'); }
+}
+
+function hideCameraModal(){
+    const modal = document.getElementById('camera-modal');
+    if(!modal) return;
+    // clear iframe src to stop playback
+    const iframe = document.getElementById('camera-modal-iframe');
+    if (iframe) iframe.src = 'about:blank';
+    const img = document.getElementById('camera-modal-img');
+    if (img) img.src = '';
+    modal.style.opacity='0'; setTimeout(()=>{ if(modal) modal.style.visibility='hidden'; }, 200);
+}
+
 function updateSecurityPage(data) {
     const zones = {
         'Front': ['front_motion', 'front_sensor'], 'Garage': ['garage_motion', 'garage_sensor'], 'Garage Side': ['garage_side_motion', 'garage_side_sensor'],
@@ -76,12 +154,23 @@ function updateSecurityPage(data) {
         }
         
         const card = document.createElement('a');
-        const zoneKey = zoneName.toLowerCase().replace(' ','');
-        card.href = cameraUrls[zoneKey] || '#';
-        card.target = '_blank';
+        const zoneKey = zoneName.toLowerCase().replace(' ', '');
+        // avoid direct navigation/download: use '#' as href and store camera URL in data attribute
+        const camUrl = cameraUrls[zoneKey] || null;
+        card.href = '#';
+        card.dataset.camUrl = camUrl || '';
         card.className = `card zone-card ${cardClass}`;
         card.innerHTML = `<h3>${zoneName}</h3><div class="zone-status">${statusText}</div>`;
         grid.appendChild(card);
+
+        // wire click to show modal when a camera URL exists
+        (function(zName, url){
+            if(url){
+                card.addEventListener('click', function(ev){ ev.preventDefault(); showCameraModal(url, zName); });
+            } else {
+                card.addEventListener('click', function(ev){ ev.preventDefault(); alert('No camera configured for ' + zName); });
+            }
+        })(zoneName, camUrl);
     }
 
     document.getElementById('system-status-text').innerHTML = activeZones > 0 ? `🔴 ${activeZones} Zone(s) Active - ALERT!` : '🟢 All Zones Armed - System Online';
