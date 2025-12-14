@@ -672,9 +672,9 @@ class ScadaActivity : BaseActivity() {
                             } else {
                                 // Repository empty — attempt a short network fetch of DVR gid (non-blocking network done on IO)
                                 try {
-                                    val fetched = withContext(Dispatchers.IO) { dvrSheetsReader.fetchLatestDvrReadings(1) }
-                                    if (!fetched.isNullOrEmpty()) {
-                                        sourceDvr = fetched[0].dvrTemp.toDouble()
+                                    val fetchedReading = withContext(Dispatchers.IO) { dvrSheetsReader.fetchLatestDvrReading() }
+                                    if (fetchedReading != null) {
+                                        sourceDvr = fetchedReading.dvrTemp.toDouble()
                                         Log.d("ScadaActivity", "Fetched DVR gid value for card: $sourceDvr")
                                     }
                                 } catch (e: Exception) {
@@ -698,9 +698,9 @@ class ScadaActivity : BaseActivity() {
                             android.util.Log.w("ScadaActivity", "DVR reading out of range (raw=$sourceDvr -> display=$displayDvr); attempting DVR-specific fallback read")
                             try {
                                 CoroutineScope(Dispatchers.IO).launch {
-                                    val dvrRows = dvrSheetsReader.fetchLatestDvrReadings(1)
-                                    if (dvrRows.isNotEmpty()) {
-                                        val d = dvrRows[0]
+                                    val dvrRow = dvrSheetsReader.fetchLatestDvrReading()
+                                    if (dvrRow != null) {
+                                        val d = dvrRow
                                         var dval = d.dvrTemp.toDouble()
                                         if (dval.isFinite() && dval > 200.0) dval -= 273.15
                                         withContext(Dispatchers.Main) {
@@ -728,6 +728,21 @@ class ScadaActivity : BaseActivity() {
                             dvrTempTextView.text = String.format(Locale.getDefault(), "%.1f°C", displayDvr)
                             lastDvrPulse = displayDvr
                             lastDvrPulseTime = System.currentTimeMillis()
+                            // Persist the DVR pulse/time so NotificationService and other components share the same baseline
+                            try {
+                                val alarmPrefs = getSharedPreferences("alarm_prefs", Context.MODE_PRIVATE)
+                                alarmPrefs.edit().putFloat("last_dvr_pulse_value", lastDvrPulse!!.toFloat()).putLong("last_dvr_pulse_time_ms", lastDvrPulseTime).apply()
+                                android.util.Log.d("ScadaActivity", "Persisted lastDvrPulse=$lastDvrPulse at $lastDvrPulseTime to alarm_prefs")
+                                // Broadcast to NotificationService (if running) so it updates its in-memory state immediately
+                                try {
+                                    val b = Intent(NotificationService.ACTION_UPDATE_DVR_PULSE)
+                                    b.putExtra("last_dvr_pulse_value", lastDvrPulse!!)
+                                    b.putExtra("last_dvr_pulse_time_ms", lastDvrPulseTime)
+                                    sendBroadcast(b)
+                                } catch (e: Exception) { android.util.Log.w("ScadaActivity", "Failed sending DVR update broadcast", e) }
+                            } catch (e: Exception) {
+                                android.util.Log.w("ScadaActivity", "Failed to persist last DVR pulse", e)
+                            }
                         }
                     } catch (e: Exception) {
                         android.util.Log.w("ScadaActivity", "Failed processing DVR temperature display", e)
@@ -757,9 +772,9 @@ class ScadaActivity : BaseActivity() {
                     if (latestReading.dvrTemp == 0.0) {
                         try {
                             CoroutineScope(Dispatchers.IO).launch {
-                                val dvrRows = dvrSheetsReader.fetchLatestDvrReadings(1)
-                                if (dvrRows.isNotEmpty()) {
-                                    val d = dvrRows[0]
+                                val dvrRow = dvrSheetsReader.fetchLatestDvrReading()
+                                if (dvrRow != null) {
+                                    val d = dvrRow
                                     withContext(Dispatchers.Main) {
                                         try {
                                             dvrTempTextView.text = String.format(Locale.getDefault(), "%.1f°C", d.dvrTemp)
@@ -815,6 +830,21 @@ class ScadaActivity : BaseActivity() {
                         if (lastDvrPulse == null) {
                             lastDvrPulse = pulseVal
                             lastDvrPulseTime = System.currentTimeMillis()
+                            // Persist initial pulse/time
+                            try {
+                                val alarmPrefs = getSharedPreferences("alarm_prefs", Context.MODE_PRIVATE)
+                                alarmPrefs.edit().putFloat("last_dvr_pulse_value", lastDvrPulse!!.toFloat()).putLong("last_dvr_pulse_time_ms", lastDvrPulseTime).apply()
+                                android.util.Log.d("ScadaActivity", "Persisted initial lastDvrPulse=$lastDvrPulse at $lastDvrPulseTime to alarm_prefs")
+                                // Broadcast update so service syncs immediately
+                                try {
+                                    val b = Intent(NotificationService.ACTION_UPDATE_DVR_PULSE)
+                                    b.putExtra("last_dvr_pulse_value", lastDvrPulse!!)
+                                    b.putExtra("last_dvr_pulse_time_ms", lastDvrPulseTime)
+                                    sendBroadcast(b)
+                                } catch (e: Exception) { android.util.Log.w("ScadaActivity", "Failed sending DVR initial broadcast", e) }
+                            } catch (e: Exception) {
+                                android.util.Log.w("ScadaActivity", "Failed to persist initial lastDvrPulse", e)
+                            }
                             val okGreen = "#4CAF50".toColorInt()
                             dvrStatusDot.imageTintList = ColorStateList.valueOf(okGreen)
                             dvrHeartbeatStatus.text = getString(R.string.status_online)
@@ -842,6 +872,21 @@ class ScadaActivity : BaseActivity() {
                                 // Pulse changed -> update time and set Online (just now)
                                 lastDvrPulse = pulseVal
                                 lastDvrPulseTime = System.currentTimeMillis()
+                                // Persist updated pulse/time so NotificationService sees the update immediately
+                                try {
+                                    val alarmPrefs = getSharedPreferences("alarm_prefs", Context.MODE_PRIVATE)
+                                    alarmPrefs.edit().putFloat("last_dvr_pulse_value", lastDvrPulse!!.toFloat()).putLong("last_dvr_pulse_time_ms", lastDvrPulseTime).apply()
+                                    android.util.Log.d("ScadaActivity", "Persisted updated lastDvrPulse=$lastDvrPulse at $lastDvrPulseTime to alarm_prefs")
+                                    // Broadcast update so service syncs immediately
+                                    try {
+                                        val b = Intent(NotificationService.ACTION_UPDATE_DVR_PULSE)
+                                        b.putExtra("last_dvr_pulse_value", lastDvrPulse!!)
+                                        b.putExtra("last_dvr_pulse_time_ms", lastDvrPulseTime)
+                                        sendBroadcast(b)
+                                    } catch (e: Exception) { android.util.Log.w("ScadaActivity", "Failed sending DVR updated broadcast", e) }
+                                } catch (e: Exception) {
+                                    android.util.Log.w("ScadaActivity", "Failed to persist updated last DVR pulse", e)
+                                }
                                 val okGreen = "#4CAF50".toColorInt()
                                 dvrStatusDot.imageTintList = ColorStateList.valueOf(okGreen)
                                 dvrHeartbeatStatus.text = "Online (now)"

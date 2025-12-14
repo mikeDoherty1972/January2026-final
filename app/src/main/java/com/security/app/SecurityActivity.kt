@@ -80,6 +80,20 @@ class SecurityActivity : BaseActivity() {
     // NetworkCallback used to monitor connectivity and update SSID when Wi-Fi is active
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
+    // Helper: check whether a gateway IP is within the RFC1918 172.16.0.0/12 private range
+    private fun is172PrivateRange(ip: String?): Boolean {
+        try {
+            if (ip.isNullOrEmpty()) return false
+            val parts = ip.split('.')
+            if (parts.size < 2) return false
+            val first = parts[0].toIntOrNull() ?: return false
+            val second = parts[1].toIntOrNull() ?: return false
+            return first == 172 && second in 16..31
+        } catch (e: Exception) {
+            return false
+        }
+    }
+
     // Actively fetch and cache SSID once (useful at startup when NetworkCallback hasn't fired yet)
     private fun fetchAndCacheSsidOnce(onComplete: (() -> Unit)? = null) {
         try {
@@ -243,7 +257,7 @@ class SecurityActivity : BaseActivity() {
                         val wifiInfo = m.invoke(wifiManager, active)
                         val raw = wifiInfo?.javaClass?.getMethod("getSSID")?.invoke(wifiInfo) as? String
                         if (!raw.isNullOrEmpty()) {
-                          val cleaned = raw.trim('"','\'').trim()
+                          val cleaned = raw.trim('\"','\'').trim()
                           val lower = cleaned.lowercase(Locale.getDefault())
                           if (lower == "<unknown ssid>" || lower == "unknown" || lower.startsWith("0x") || lower == "<none>") return null
                           return cleaned
@@ -270,7 +284,7 @@ class SecurityActivity : BaseActivity() {
                         val info = wifiMgr?.connectionInfo
                         val raw = info?.ssid
                         if (!raw.isNullOrEmpty()) {
-                            val cleaned = raw.trim('"','\'').trim()
+                            val cleaned = raw.trim('\"','\'').trim()
                             val lower = cleaned.lowercase(Locale.getDefault())
                             if (lower == "<unknown ssid>" || lower == "unknown" || lower.startsWith("0x") || lower == "<none>") return null
                             Log.d("SecurityActivity", "readSsidFromWifiManager: deprecated connectionInfo fallback used")
@@ -348,11 +362,19 @@ class SecurityActivity : BaseActivity() {
         val prefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
         val persisted = prefs.getString("security_recent_activity", null)
         if (!persisted.isNullOrEmpty()) {
+            // Normalize line endings and remove any accidental empty lines
+            val normalized = persisted.replace("\r\n", "\n").replace("\r", "\n").trim('\n')
+            val items = if (normalized.isEmpty()) emptyList() else normalized.split("\n")
             recentActivityCache.clear()
-            recentActivityCache.addAll(persisted.split("\n"))
+            recentActivityCache.addAll(items)
             // Show newest activity at the top: take the last 5 (most recent) then reverse so latest is first
-            recentActivityText.text = recentActivityCache.takeLast(5).reversed().joinToString("\n")
-            recentActivityText.setTextColor(resources.getColor(android.R.color.white, theme))
+            try {
+                recentActivityText.text = recentActivityCache.takeLast(5).reversed().joinToString("\n")
+                recentActivityText.setTextColor(resources.getColor(android.R.color.white, theme))
+            } catch (e: Exception) {
+                Log.w("SecurityActivity", "Failed setting recentActivityText from persisted data", e)
+            }
+            Log.d("SecurityActivity", "Loaded ${recentActivityCache.size} persisted recentActivity entries")
         }
 
         // Setup back button
@@ -938,21 +960,47 @@ class SecurityActivity : BaseActivity() {
          }
      }
 
+    // Helper: return true if the currently active network transport is Wi‑Fi
+    private fun isActiveNetworkWifi(): Boolean {
+        try {
+            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
+            val active = cm.activeNetwork ?: return false
+            val caps = cm.getNetworkCapabilities(active) ?: return false
+            return caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI)
+        } catch (e: Exception) {
+            Log.w("SecurityActivity", "isActiveNetworkWifi failed", e)
+            return false
+        }
+    }
+
     private fun isOnHomeNetwork(): Boolean {
         try {
-            // Prefer a configured home SSID (user can save via the presence dialog). If saved and we can read SSID, compare.
             val prefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
             val savedHome = prefs.getString("home_ssid", null)
+            val savedHomeGateway = prefs.getString("home_gateway", null)
             val currentSsid = try { getCurrentSsid() } catch (_: Exception) { null }
+
+            // If a saved SSID exists and we can read SSID, prefer that (trimmed, case-insensitive)
             if (!savedHome.isNullOrEmpty() && !currentSsid.isNullOrEmpty()) {
-                return savedHome == currentSsid
+                return savedHome.trim().equals(currentSsid.trim(), ignoreCase = true)
             }
-            // Fallback: check gateway IP heuristics (common home gateway). Accept multiple common gateways.
+
+            // Fallback to gateway heuristics
             val gw = try { getGatewayIp() } catch (_: Exception) { null } ?: return false
+
+            // If user explicitly saved a gateway, trust it
+            if (!savedHomeGateway.isNullOrEmpty() && savedHomeGateway.trim() == gw.trim()) return true
+
             val knownHomeGateways = setOf("192.168.8.1", "192.168.0.1", "192.168.1.1")
             if (gw in knownHomeGateways) return true
-            // If gateway is in private RFC1918 range that isn't obviously remote, consider it home-ish
-            if (gw.startsWith("10.") || gw.startsWith("192.168.") || gw.startsWith("172.")) return true
+
+            // Treat private-range gateways as home ONLY when the active transport is Wi‑Fi. This avoids
+            // misclassifying carrier-private addresses (e.g., 10.x) on mobile data as the home network.
+            val isWifi = isActiveNetworkWifi()
+            if (isWifi) {
+                if (gw.startsWith("10.") || gw.startsWith("192.168.") || is172PrivateRange(gw)) return true
+            }
+
             return false
         } catch (e: Exception) {
             Log.w("SecurityActivity", "isOnHomeNetwork check failed", e)
@@ -960,49 +1008,49 @@ class SecurityActivity : BaseActivity() {
         }
     }
 
-    private fun isNetworkAvailable(): Boolean {
-        try {
-            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-            val active = cm.activeNetwork
-            return active != null
-        } catch (_: Exception) { return false }
-    }
+     private fun isNetworkAvailable(): Boolean {
+         try {
+             val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+             val active = cm.activeNetwork
+             return active != null
+         } catch (_: Exception) { return false }
+     }
 
-    // Updated: accept an optional inline dot to mirror homeDot state on the main card header
-    private fun updateNetworkIndicators(homeDot: android.widget.ImageView?, bridgeDot: android.widget.ImageView?, inlineDot: android.widget.ImageView? = null) {
-        try {
-            val prefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
-            val savedHome = prefs.getString("home_ssid", null)
+     // Updated: accept an optional inline dot to mirror homeDot state on the main card header
+     private fun updateNetworkIndicators(homeDot: android.widget.ImageView?, bridgeDot: android.widget.ImageView?, inlineDot: android.widget.ImageView? = null) {
+         try {
+             val prefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+             val savedHome = prefs.getString("home_ssid", null)
 
-            // If we have a saved home SSID but don't have location permission, request it asynchronously
-            // but continue with gateway heuristics so UI still shows network/bridge status immediately.
-            if (!savedHome.isNullOrEmpty() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                    Log.d("SecurityActivity", "Location permission not granted; requesting to enable SSID-aware home detection")
-                    ensureLocationPermissionForSsid {
-                        try { updateNetworkIndicators(homeDot, bridgeDot, inlineDot) } catch (e: Exception) { Log.w("SecurityActivity", "Re-run updateNetworkIndicators failed", e) }
-                    }
-                    // Do NOT return here — continue and use gateway-based detection so indicators update immediately.
-                }
-            }
+             // If we have a saved home SSID but don't have location permission, request it asynchronously
+             // but continue with gateway heuristics so UI still shows network/bridge status immediately.
+             if (!savedHome.isNullOrEmpty() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                 if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                     Log.d("SecurityActivity", "Location permission not granted; requesting to enable SSID-aware home detection")
+                     ensureLocationPermissionForSsid {
+                         try { updateNetworkIndicators(homeDot, bridgeDot, inlineDot) } catch (e: Exception) { Log.w("SecurityActivity", "Re-run updateNetworkIndicators failed", e) }
+                     }
+                     // Do NOT return here — continue and use gateway-based detection so indicators update immediately.
+                 }
+             }
 
-            // Determine whether we're on the home network. Prefer SSID comparison when available, otherwise fall back to gateway heuristics.
-            var currentSsid = try { getCurrentSsid() } catch (e: Exception) { Log.w("SecurityActivity", "getCurrentSsid failed", e); null }
-            // If we couldn't read SSID synchronously, try an active fetch (only if permission is present)
-            if (currentSsid.isNullOrEmpty() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-                try {
-                    fetchAndCacheSsidOnce { try { updateNetworkIndicators(homeDot, bridgeDot, inlineDot) } catch (_: Exception) {} }
-                } catch (_: Exception) {}
-                // Use lastKnownSsid if updated by the background fetch, otherwise continue with gateway heuristics for now
-                currentSsid = lastKnownSsid
-            }
+             // Determine whether we're on the home network. Prefer SSID comparison when available, otherwise fall back to gateway heuristics.
+             var currentSsid = try { getCurrentSsid() } catch (e: Exception) { Log.w("SecurityActivity", "getCurrentSsid failed", e); null }
+             // If we couldn't read SSID synchronously, try an active fetch (only if permission is present)
+             if (currentSsid.isNullOrEmpty() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                 try {
+                     fetchAndCacheSsidOnce { try { updateNetworkIndicators(homeDot, bridgeDot, inlineDot) } catch (_: Exception) {} }
+                 } catch (_: Exception) {}
+                 // Use lastKnownSsid if updated by the background fetch, otherwise continue with gateway heuristics for now
+                 currentSsid = lastKnownSsid
+             }
 
-            val onHome = try {
-                if (!savedHome.isNullOrEmpty() && !currentSsid.isNullOrEmpty()) {
-                    // Use trimmed case-insensitive comparisons to avoid quoting/ case issues
-                    savedHome.trim().equals(currentSsid.trim(), ignoreCase = true)
-                } else {
-                    // Gateway heuristic fallback
+             val onHome = try {
+                 if (!savedHome.isNullOrEmpty() && !currentSsid.isNullOrEmpty()) {
+                     // Use trimmed case-insensitive comparisons to avoid quoting/ case issues
+                     savedHome.trim().equals(currentSsid.trim(), ignoreCase = true)
+                 } else {
+                     // Gateway heuristic fallback
                     val gw = try { getGatewayIp() } catch (e: Exception) { Log.w("SecurityActivity", "getGatewayIp failed", e); null }
                     val knownHomeGateways = setOf("192.168.8.1", "192.168.0.1", "192.168.1.1")
                     if (gw == null) {
@@ -1010,14 +1058,20 @@ class SecurityActivity : BaseActivity() {
                     } else if (gw in knownHomeGateways) {
                         true
                     } else {
-                        // Private ranges considered home-ish
-                        gw.startsWith("10.") || gw.startsWith("192.168.") || gw.startsWith("172.")
+                        // Only treat private gateways as "home" when active transport is Wi‑Fi. Cellular carriers
+                        // often use private NAT addresses (10.x) and should not be classified as home.
+                        val isWifi = isActiveNetworkWifi()
+                        if (isWifi) {
+                            gw.startsWith("10.") || gw.startsWith("192.168.") || is172PrivateRange(gw)
+                        } else {
+                            false
+                        }
                     }
-                }
-            } catch (e: Exception) {
-                Log.w("SecurityActivity", "Determining home network failed", e)
-                false
-            }
+                 }
+             } catch (e: Exception) {
+                 Log.w("SecurityActivity", "Determining home network failed", e)
+                 false
+             }
 
             // Check general network availability for bridge indicator
             val net = try { isNetworkAvailable() } catch (e: Exception) { Log.w("SecurityActivity", "isNetworkAvailable failed", e); false }
@@ -1062,33 +1116,61 @@ class SecurityActivity : BaseActivity() {
     }
 
     private fun showPresenceDialog() {
-        val prefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
-        val gateway = try { getGatewayIp() } catch (e: Exception) { null }
-        val detectedSsid = try { getCurrentSsid() } catch (_: Exception) { null }
-        val savedHomeSsid = prefs.getString("home_ssid", null)
-        val isHomeBySsid = if (!savedHomeSsid.isNullOrEmpty() && !detectedSsid.isNullOrEmpty()) detectedSsid == savedHomeSsid else false
-        val isHomeByGateway = gateway == "192.168.8.1"
-        val atHome = if (!savedHomeSsid.isNullOrEmpty()) isHomeBySsid else isHomeByGateway
-        val gwText = gateway ?: "unknown"
-        val ssidText = detectedSsid ?: "unknown"
-        val savedText = savedHomeSsid ?: "(not set)"
-        val message = "Gateway: $gwText\nSSID: $ssidText\nSaved home SSID: $savedText\nAt home: $atHome"
-        runOnUiThread {
-            val builder = AlertDialog.Builder(this)
-                .setTitle("Presence check")
-                .setMessage(message)
-                .setPositiveButton("OK", null)
-            // If we can read the SSID, allow saving it as home SSID
-            if (!detectedSsid.isNullOrEmpty()) {
-                builder.setNeutralButton("Save SSID as Home") { _, _ -> saveCurrentSsidAsHome() }
-            } else {
-                // Request permission then re-open the dialog so user can save SSID
-                builder.setNeutralButton("Enable SSID read") { _, _ -> ensureLocationPermissionForSsid { showPresenceDialog() } }
-            }
-            val dlg = builder.create()
-            dlg.show()
-        }
-    }
+         val prefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+         val gateway = try { getGatewayIp() } catch (e: Exception) { null }
+         val detectedSsid = try { getCurrentSsid() } catch (_: Exception) { null }
+         val savedHomeSsid = prefs.getString("home_ssid", null)
+         val savedHomeGateway = prefs.getString("home_gateway", null)
+         val isHomeBySsid = if (!savedHomeSsid.isNullOrEmpty() && !detectedSsid.isNullOrEmpty()) detectedSsid == savedHomeSsid else false
+         val isHomeByGateway = gateway == "192.168.8.1"
+         val atHome = if (!savedHomeSsid.isNullOrEmpty()) isHomeBySsid else isHomeByGateway
+         val gwText = gateway ?: "unknown"
+         val ssidText = detectedSsid ?: "unknown"
+         val savedText = savedHomeSsid ?: "(not set)"
+         val savedGwText = savedHomeGateway ?: "(not set)"
+         val message = "Gateway: $gwText\nSSID: $ssidText\nSaved home SSID: $savedText\nAt home: $atHome"
+         runOnUiThread {
+             val builder = AlertDialog.Builder(this)
+                 .setTitle("Presence check")
+                 .setMessage(message)
+                 .setPositiveButton("OK", null)
+             // Provide a Save... action which opens a small menu allowing saving either SSID or Gateway when available
+             if (!detectedSsid.isNullOrEmpty() || !gateway.isNullOrEmpty()) {
+                 builder.setNeutralButton("Save...") { _, _ ->
+                     try {
+                         val options = mutableListOf<String>()
+                         if (!detectedSsid.isNullOrEmpty()) options.add("Save SSID as Home")
+                         if (!gateway.isNullOrEmpty()) options.add("Save Gateway as Home")
+                         val opts = options.toTypedArray()
+                         val sub = AlertDialog.Builder(this)
+                             .setTitle("Save home identifier")
+                             .setItems(opts) { _, which ->
+                                 when (opts[which]) {
+                                     "Save SSID as Home" -> saveCurrentSsidAsHome()
+                                     "Save Gateway as Home" -> {
+                                         try {
+                                             prefs.edit().putString("home_gateway", gateway).apply()
+                                             try { ToastHelper.show(this, "Saved home gateway: $gateway", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
+                                             // Refresh indicators to pick up new saved gateway immediately
+                                             runOnUiThread { updateNetworkIndicators(networkHomeDot, networkBridgeDot, networkHomeDotInline) }
+                                         } catch (e: Exception) { Log.w("SecurityActivity", "Failed saving home gateway", e) }
+                                     }
+                                 }
+                             }
+                             .setNegativeButton("Cancel", null)
+                         sub.show()
+                     } catch (e: Exception) {
+                         Log.w("SecurityActivity", "Failed showing save options", e)
+                     }
+                 }
+             } else {
+                 // Request permission then re-open the dialog so user can save SSID
+                 builder.setNeutralButton("Enable SSID read") { _, _ -> ensureLocationPermissionForSsid { showPresenceDialog() } }
+             }
+             val dlg = builder.create()
+             dlg.show()
+         }
+     }
 
     private fun updateScheduleUi() {
         try {

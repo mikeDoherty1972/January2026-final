@@ -135,33 +135,38 @@ class AlarmFullscreenActivity : AppCompatActivity() {
             lastAlarmTimeMs = if (alarmTimeMs > 0L) alarmTimeMs else System.currentTimeMillis()
         }
 
-        // Play bundled alarm with explicit alarm audio attributes (fallback to system ringtone)
+        // Play bundled alarm audio only when intent extra 'play_sound' is true; otherwise show big red page and vibrate but remain silent.
         try {
-            try {
-                android.util.Log.d("AlarmFullscreenActivity", "Attempting to play bundled alarm_tone from res/raw")
-                val afd = resources.openRawResourceFd(R.raw.alarm_tone)
-                mediaPlayer = MediaPlayer()
-                mediaPlayer?.setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_ALARM)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                        .build()
-                )
-                mediaPlayer?.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
-                afd.close()
-                mediaPlayer?.isLooping = true
-                mediaPlayer?.prepare()
-                mediaPlayer?.start()
-                android.util.Log.d("AlarmFullscreenActivity", "Started bundled MediaPlayer for alarm_tone")
-            } catch (e: Exception) {
-                android.util.Log.w("AlarmFullscreenActivity", "Failed to play bundled alarm_tone, falling back to system alarm: ${e.message}")
-                // Fallback to system alarm sound via RingtoneManager
-                val fallback = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-                    ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-                mediaPlayer = MediaPlayer.create(this, fallback)
-                mediaPlayer?.isLooping = true
-                mediaPlayer?.start()
-                android.util.Log.d("AlarmFullscreenActivity", "Started fallback MediaPlayer with system alarm URI")
+            val playSound = intent.getBooleanExtra("play_sound", false)
+            if (playSound) {
+                try {
+                    android.util.Log.d("AlarmFullscreenActivity", "Attempting to play bundled alarm_tone from res/raw")
+                    val afd = resources.openRawResourceFd(R.raw.alarm_tone)
+                    mediaPlayer = MediaPlayer()
+                    mediaPlayer?.setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_ALARM)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .build()
+                    )
+                    mediaPlayer?.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+                    afd.close()
+                    mediaPlayer?.isLooping = true
+                    mediaPlayer?.prepare()
+                    mediaPlayer?.start()
+                    android.util.Log.d("AlarmFullscreenActivity", "Started bundled MediaPlayer for alarm_tone")
+                } catch (e: Exception) {
+                    android.util.Log.w("AlarmFullscreenActivity", "Failed to play bundled alarm_tone, falling back to system alarm: ${e.message}")
+                    // Fallback to system alarm sound via RingtoneManager
+                    val fallback = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                        ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                    mediaPlayer = MediaPlayer.create(this, fallback)
+                    mediaPlayer?.isLooping = true
+                    mediaPlayer?.start()
+                    android.util.Log.d("AlarmFullscreenActivity", "Started fallback MediaPlayer with system alarm URI")
+                }
+            } else {
+                android.util.Log.d("AlarmFullscreenActivity", "play_sound=false; skipping audible alarm playback (silent full-screen page)")
             }
         } catch (e: Exception) {
             mediaPlayer = null

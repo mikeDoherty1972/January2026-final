@@ -11,6 +11,7 @@ import java.util.Timer
 import java.util.TimerTask
 import android.app.PendingIntent
 import android.os.Build
+import android.annotation.SuppressLint
 import android.Manifest
 import androidx.core.content.ContextCompat
 import android.content.pm.PackageManager
@@ -22,6 +23,8 @@ class NotificationService : Service() {
         // Actions the service can handle directly
         const val ACTION_TEST_ALARMS = "com.security.app.ACTION_TEST_ALARMS"
         const val ACTION_SECURITY_ALARM = "com.security.app.ACTION_SECURITY_ALARM"
+        // Action used by ScadaActivity to push DVR pulse updates to the running service
+        const val ACTION_UPDATE_DVR_PULSE = "com.security.app.ACTION_UPDATE_DVR_PULSE"
         var isRunning = false
 
         // Default fallback thresholds if prefs missing
@@ -35,9 +38,13 @@ class NotificationService : Service() {
         private const val FOREGROUND_NOTIF_ID = 1000
     }
 
+    private var dvrUpdateReceiver: android.content.BroadcastReceiver? = null
+
     private val job = SupervisorJob()
     private val scope = CoroutineScope(Dispatchers.IO + job)
     private lateinit var sheetsReader: GoogleSheetsReader
+    // Use DVR-specific reader to get the dedicated DVR gid values (keeps stale detection consistent with UI)
+    private val dvrSheetsReader = DVRGoogleSheetsReader()
     private var timer: Timer? = null
     private val waterUsageHistory = mutableListOf<Double>()
     private var highAmpsStartTime = 0L
@@ -46,12 +53,51 @@ class NotificationService : Service() {
     private var lastDvrPulse: Double? = null
     private var lastDvrPulseTime = 0L
 
+    @SuppressLint("UnspecifiedRegisterReceiverFlag")
     override fun onCreate() {
         super.onCreate()
         isRunning = true
         sheetsReader = GoogleSheetsReader()
-        // Notification channels are created centrally in App.onCreate() to avoid race
-        // conditions and duplicated channel recreation. No-op here.
+        // Register a receiver so ScadaActivity can push DVR pulse updates to this running service
+        try {
+            val filter = android.content.IntentFilter(ACTION_UPDATE_DVR_PULSE)
+            dvrUpdateReceiver = object : android.content.BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: android.content.Intent?) {
+                    try {
+                        if (intent == null) return
+                        val valDouble = intent.getDoubleExtra("last_dvr_pulse_value", Double.NaN)
+                        val timeMs = intent.getLongExtra("last_dvr_pulse_time_ms", 0L)
+                        if (!valDouble.isNaN() && timeMs > 0L) {
+                            lastDvrPulse = valDouble
+                            lastDvrPulseTime = timeMs
+                            // persist to prefs so other processes see it
+                            try {
+                                val alarmPrefs = getSharedPreferences("alarm_prefs", Context.MODE_PRIVATE)
+                                alarmPrefs.edit().putFloat("last_dvr_pulse_value", lastDvrPulse!!.toFloat()).putLong("last_dvr_pulse_time_ms", lastDvrPulseTime).apply()
+                            } catch (e: Exception) { android.util.Log.w("NotificationService", "Failed to persist DVR pulse from broadcast", e) }
+                            android.util.Log.d("NotificationService", "Broadcast updated lastDvrPulse=$lastDvrPulse at $lastDvrPulseTime")
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.w("NotificationService", "DVR update broadcast handling failed", e)
+                    }
+                }
+            }
+            // Register an unexported receiver (only for in-app broadcasts). Use the flag on API 33+;
+            // on older platforms call the legacy overload and suppress the lint warning about missing flags.
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    registerReceiver(dvrUpdateReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+                } else {
+                    registerReceiver(dvrUpdateReceiver, filter)
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("NotificationService", "Receiver registration failed", e)
+            }
+         } catch (e: Exception) {
+             android.util.Log.w("NotificationService", "Failed registering DVR update receiver", e)
+         }
+         // Notification channels are created centrally in App.onCreate() to avoid race
+         // conditions and duplicated channel recreation. No-op here.
 
         // Sync last DVR pulse from persistent prefs so service doesn't treat a freshly-updated UI
         // pulse as stale when it starts or resumes.
@@ -85,31 +131,76 @@ class NotificationService : Service() {
             }
         }
 
-        // Fallback to Sheets network fetch
-        val readings = sheetsReader.fetchLatestReadings(1)
-        return if (readings.isNotEmpty()) readings[0] else null
+        // Primary: fetch the main sheet reading (contains waterPressure and other fields)
+        try {
+            val mainReadings = sheetsReader.fetchLatestReadings(1)
+            if (!mainReadings.isNullOrEmpty()) {
+                var main = mainReadings[0]
+                // If DVR gid provides a fresher/more accurate dvrTemp, override only the dvrTemp field
+                try {
+                    val dvrRow = dvrSheetsReader.fetchLatestDvrReading()
+                    if (dvrRow != null) {
+                        // create a merged reading: copy main but replace dvrTemp
+                        main = GoogleSheetsReader.SensorReading(
+                            timestamp = main.timestamp,
+                            indoorTemp = main.indoorTemp,
+                            outdoorTemp = main.outdoorTemp,
+                            humidity = main.humidity,
+                            windSpeed = main.windSpeed,
+                            windDirection = main.windDirection,
+                            currentPower = main.currentPower,
+                            currentAmps = main.currentAmps,
+                            dailyPower = main.dailyPower,
+                            dvrTemp = dvrRow.dvrTemp, // override from DVR gid
+                            waterTemp = main.waterTemp,
+                            waterPressure = main.waterPressure,
+                            dailyWater = main.dailyWater
+                        )
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("NotificationService", "DVR-specific reader failed (non-fatal)", e)
+                }
+                return main
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("NotificationService", "Failed fetching main sheet readings", e)
+        }
+
+        // Fallback: if main sheet unavailable, try DVR-only reader (best-effort for dvrTemp)
+        try {
+            val dvrRow = dvrSheetsReader.fetchLatestDvrReading()
+            if (dvrRow != null) return dvrRow
+        } catch (e: Exception) {
+            android.util.Log.w("NotificationService", "DVR-specific reader failed (fallback)", e)
+        }
+
+        return null
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // Handle service actions: test alarms and security alarm triggers
-        val action = intent?.action
-        if (action == ACTION_TEST_ALARMS) {
-            android.util.Log.d("NotificationService", "Received ACTION_TEST_ALARMS: posting single full-screen test alarm")
-            sendNotification("TEST ALARM", "This is a single full-screen test alarm.", true)
-            return START_NOT_STICKY
-        }
+         // Handle service actions: test alarms and security alarm triggers
+         val action = intent?.action
+         if (action == ACTION_TEST_ALARMS) {
+             android.util.Log.d("NotificationService", "Received ACTION_TEST_ALARMS: posting single full-screen test alarm")
+             // Keep test alarms audible for developer testing
+             sendNotification("TEST ALARM", "This is a single full-screen test alarm.", true, true)
+             return START_NOT_STICKY
+         }
 
-        if (action == ACTION_SECURITY_ALARM) {
-            android.util.Log.d("NotificationService", "Received ACTION_SECURITY_ALARM: posting security full-screen alarm")
-            val i = intent!!
-            val title = i.getStringExtra("alarm_title") ?: "Security Alarm"
-            val message = i.getStringExtra("alarm_message") ?: "Security breach detected"
-            sendNotification(title, message, true)
-            return START_NOT_STICKY
-        }
+         if (action == ACTION_SECURITY_ALARM) {
+             android.util.Log.d("NotificationService", "Received ACTION_SECURITY_ALARM: posting security full-screen alarm")
+             val i = intent
+             if (i != null) {
+                 val title = i.getStringExtra("alarm_title") ?: "Security Alarm"
+                 val message = i.getStringExtra("alarm_message") ?: "Security breach detected"
+                 // Security alarms should be audible on the full-screen alarm page
+                 sendNotification(title, message, true, true)
+             }
+             return START_NOT_STICKY
+         }
 
-        startMonitoring()
-        return START_STICKY
+         startMonitoring()
+         return START_STICKY
     }
 
     // Channels are managed by Application class (App.kt). No-op here to avoid duplicate
@@ -178,9 +269,42 @@ class NotificationService : Service() {
 
             if (latestReading != null) {
                 // Check low water pressure
-                if (latestReading.waterPressure.toDouble() < lowPressure) {
-                    // System alert: non-security, post silently (no full-screen)
-                    sendNotification("Low Water Pressure Alert", "Water pressure is below ${lowPressure} bar!", false)
+                val wp = latestReading.waterPressure.toDouble()
+                if (wp <= 0.0) {
+                    // Missing or invalid water pressure reading — skip low-pressure alert and log for diagnosis
+                    android.util.Log.d("NotificationService", "Skipping low-pressure check: waterPressure=$wp (missing/invalid)")
+                } else if (wp < lowPressure) {
+                    // Deduplicate: only send when not already alerted
+                    try {
+                        val alarmPrefs = getSharedPreferences("alarm_prefs", Context.MODE_PRIVATE)
+                        val wasActive = alarmPrefs.getBoolean("low_pressure_alert_active", false)
+                        val lastAlertMs = alarmPrefs.getLong("low_pressure_last_alert_ms", 0L)
+                        val cooldownMs = alarmPrefs.getLong("low_pressure_cooldown_ms", 15 * 60 * 1000L) // default 15 minutes
+                        val now = System.currentTimeMillis()
+                        if (!wasActive || (now - lastAlertMs) > cooldownMs) {
+                            // Use full-screen page (big red) but silent for non-security system alerts
+                            sendNotification("Low Water Pressure Alert", "Water pressure is below ${lowPressure} bar! Current: ${String.format(java.util.Locale.getDefault(), "%.2f", wp)} bar", true, false)
+                            try { alarmPrefs.edit().putBoolean("low_pressure_alert_active", true).putLong("low_pressure_last_alert_ms", now).apply() } catch (_: Exception) {}
+                        } else {
+                            android.util.Log.d("NotificationService", "Low pressure already alerted; skipping repeat. wp=$wp threshold=$lowPressure")
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.w("NotificationService", "Failed handling low-pressure deduplication", e)
+                        sendNotification("Low Water Pressure Alert", "Water pressure is below ${lowPressure} bar! Current: ${String.format(java.util.Locale.getDefault(), "%.2f", wp)} bar", true, false)
+                    }
+                } else {
+                    // Pressure is OK — clear any active low-pressure alert flag so future low events will alert again
+                    try {
+                        val alarmPrefs = getSharedPreferences("alarm_prefs", Context.MODE_PRIVATE)
+                        val wasActive = alarmPrefs.getBoolean("low_pressure_alert_active", false)
+                        if (wasActive) {
+                            alarmPrefs.edit().putBoolean("low_pressure_alert_active", false).apply()
+                            // Optionally send a recovery/clear notification (silent)
+                            sendNotification("Water Pressure Restored", "Water pressure is back to ${String.format(java.util.Locale.getDefault(), "%.2f", wp)} bar", true, false)
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.w("NotificationService", "Failed clearing low-pressure alert flag", e)
+                    }
                 }
 
                 // Check high amps
@@ -188,7 +312,7 @@ class NotificationService : Service() {
                     if (highAmpsStartTime == 0L) highAmpsStartTime = System.currentTimeMillis()
                     if (System.currentTimeMillis() - highAmpsStartTime >= highAmpsDuration) {
                         // System alert: non-security
-                        sendNotification("High Electricity Usage Alert", "Electricity usage has been over ${highAmps} amps for the configured duration!", false)
+                        sendNotification("High Electricity Usage Alert", "Electricity usage has been over ${highAmps} amps for the configured duration!", true, false)
                         highAmpsStartTime = 0L
                     }
                 } else {
@@ -218,7 +342,7 @@ class NotificationService : Service() {
                         val minutesElapsed = (System.currentTimeMillis() - lastDvrPulseTime) / 60000L
                         if (minutesElapsed >= dvrStaleMinutes) {
                             // System-level DVR stale: non-security, post silently (no full-screen)
-                            sendNotification("DVR Stale Pulse Alert", "DVR pulse has not changed in $minutesElapsed minutes (configured $dvrStaleMinutes minutes).", false)
+                            sendNotification("DVR Stale Pulse Alert", "DVR pulse has not changed in $minutesElapsed minutes (configured $dvrStaleMinutes minutes).", true, false)
                             // reset timer to avoid repeated notifications
                             lastDvrPulseTime = System.currentTimeMillis()
                             try {
@@ -263,7 +387,7 @@ class NotificationService : Service() {
             // If absolute increase exceeds threshold, raise a distinct alarm
             if (difference >= hourlyThreshold) {
                 // System-level alert: non-security
-                sendNotification("High Water Usage Alert", "Water usage increased by ${String.format("%.1f", difference)} units in the last ${windowHours} hour(s) (threshold ${String.format("%.1f", hourlyThreshold)}).", false)
+                sendNotification("High Water Usage Alert", "Water usage increased by ${String.format("%.1f", difference)} units in the last ${windowHours} hour(s) (threshold ${String.format("%.1f", hourlyThreshold)}).", true, false)
                 // return early to avoid double alarming (variance check is less relevant if absolute threshold hit)
                 return
             }
@@ -276,79 +400,116 @@ class NotificationService : Service() {
                 }.average()
                 if (variance < varianceThreshold) {
                     // System-level alert: non-security
-                    sendNotification("Constant Water Usage Alert", "Water usage has been constant for the last ${windowHours} hour(s). Possible pipe burst!", false)
+                    sendNotification("Constant Water Usage Alert", "Water usage has been constant for the last ${windowHours} hour(s). Possible pipe burst!", true, false)
                 }
             }
         }
     }
 
-    private fun sendNotification(title: String, message: String, fullScreen: Boolean = false) {
-        // Record alarm in recent alarms history as JSON objects (keep last 5)
-        try {
-            val prefs = getSharedPreferences("alarm_history", Context.MODE_PRIVATE)
-            val key = "recent_alarms_json"
-            val existing = prefs.getString(key, "[]") ?: "[]"
-            val arr = org.json.JSONArray(existing)
-            val obj = org.json.JSONObject()
-            obj.put("time_ms", System.currentTimeMillis())
-            obj.put("title", title)
-            obj.put("message", message)
-            // Optional richer fields - left blank or defaults here
-            obj.put("zone", org.json.JSONObject.NULL)
-            obj.put("severity", if (fullScreen) "critical" else "warning")
-            obj.put("sensors", org.json.JSONArray())
-
-            val newArr = org.json.JSONArray()
-            newArr.put(obj)
-            var i = 0
-            while (i < arr.length() && newArr.length() < 5) {
-                try { newArr.put(arr.getJSONObject(i)) } catch (_: Exception) {}
-                i++
-            }
-            prefs.edit().putString(key, newArr.toString()).apply()
-        } catch (e: Exception) {
-            android.util.Log.w("NotificationService", "Failed to record alarm history", e)
-        }
-
-        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        // Use the silent channel for full-screen alarms (so system won't replace audio); otherwise use default channel
-        val channelId = if (fullScreen && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            // use the silent channel we create in App
-            "security_notifications_silent"
-        } else {
-            getString(R.string.default_notification_channel_id)
-        }
-
-        val builder = NotificationCompat.Builder(this, channelId)
-            .setContentTitle(title)
-            .setContentText(message)
-            .setSmallIcon(R.drawable.ic_notification)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setAutoCancel(true)
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
-
-        // For full-screen alarms we intentionally do NOT set a notification sound here.
-        // The notification is posted to a silent channel and the app's AlarmFullscreenActivity
-        // is explicitly started to play the bundled `res/raw/alarm_tone.mp3` via MediaPlayer.
-        if (fullScreen) {
-            android.util.Log.d("NotificationService", "Full-screen alarm: posting to channel=$channelId without builder.setSound; activity will play audio")
-        } else {
-            // For non-full-screen notifications we can leave the default channel behavior (channel may have sound)
-            android.util.Log.d("NotificationService", "Notification (non-fullscreen) will use channel=$channelId")
-        }
-
-        // Debug: explicitly log the channel sound for visibility (API 26+)
+    private fun ensureSecurityAlertChannel(notificationManager: NotificationManager) {
         try {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                val ch = notificationManager.getNotificationChannel(channelId)
-                android.util.Log.d("NotificationService", "Channel '$channelId' sound=${ch?.sound}")
+                val chId = "security_alerts"
+                val existing = notificationManager.getNotificationChannel(chId)
+                if (existing == null) {
+                    val soundUri = android.net.Uri.parse("android.resource://$packageName/${R.raw.alarm_tone}")
+                    val audioAttrs = android.media.AudioAttributes.Builder()
+                        .setUsage(android.media.AudioAttributes.USAGE_ALARM)
+                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .setFlags(android.media.AudioAttributes.FLAG_AUDIBILITY_ENFORCED)
+                        .build()
+                    val secChannel = android.app.NotificationChannel(chId, "Security Alerts", android.app.NotificationManager.IMPORTANCE_HIGH).apply {
+                        description = "Notifications for security and critical system alerts"
+                        setSound(soundUri, audioAttrs)
+                        enableLights(true)
+                        enableVibration(true)
+                    }
+                    notificationManager.createNotificationChannel(secChannel)
+                    android.util.Log.d("NotificationService", "Created security_alerts notification channel with bundled alarm tone")
+                }
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            android.util.Log.w("NotificationService", "Failed ensuring security_alerts channel", e)
+        }
+    }
 
-        // If this is a full-screen alarm, start the AlarmFullscreenActivity directly and skip posting a notification.
-        // Posting a full-screen notification can cause the system to play its own alarm sound on some devices. Starting
-        // the activity directly guarantees only the app's bundled MediaPlayer plays the alarm.
-        if (fullScreen) {
+    /**
+     * Send a notification.
+     * - fullScreen=true: starts AlarmFullscreenActivity directly (keeps previous behavior)
+     * - audible=true: use the security_alerts channel (with bundled mp3) for non-fullscreen alerts
+     */
+    private fun sendNotification(title: String, message: String, fullScreen: Boolean = false, audible: Boolean = false) {
+         // Record alarm in recent alarms history as JSON objects (keep last 5)
+         try {
+             val prefs = getSharedPreferences("alarm_history", Context.MODE_PRIVATE)
+             val key = "recent_alarms_json"
+             val existing = prefs.getString(key, "[]") ?: "[]"
+             val arr = org.json.JSONArray(existing)
+             val obj = org.json.JSONObject()
+             obj.put("time_ms", System.currentTimeMillis())
+             obj.put("title", title)
+             obj.put("message", message)
+             // Optional richer fields - left blank or defaults here
+             obj.put("zone", org.json.JSONObject.NULL)
+             obj.put("severity", if (fullScreen) "critical" else "warning")
+             obj.put("sensors", org.json.JSONArray())
+
+             val newArr = org.json.JSONArray()
+             newArr.put(obj)
+             var i = 0
+             while (i < arr.length() && newArr.length() < 5) {
+                 try { newArr.put(arr.getJSONObject(i)) } catch (_: Exception) {}
+                 i++
+             }
+             prefs.edit().putString(key, newArr.toString()).apply()
+         } catch (e: Exception) {
+             android.util.Log.w("NotificationService", "Failed to record alarm history", e)
+         }
+
+         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+         // Choose channel:
+         // - fullScreen -> keep previous flow (silent channel + direct activity launch)
+         // - non-fullscreen audible -> use 'security_alerts' channel with bundled mp3
+         // - non-fullscreen silent/default -> use default channel id
+         val channelId = when {
+             fullScreen && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O -> "security_notifications_silent"
+             !fullScreen && audible -> {
+                 ensureSecurityAlertChannel(notificationManager)
+                 "security_alerts"
+             }
+             else -> getString(R.string.default_notification_channel_id)
+         }
+
+         val builder = NotificationCompat.Builder(this, channelId)
+             .setContentTitle(title)
+             .setContentText(message)
+             .setSmallIcon(R.drawable.ic_notification)
+             .setPriority(NotificationCompat.PRIORITY_HIGH)
+             .setAutoCancel(true)
+             .setCategory(NotificationCompat.CATEGORY_ALARM)
+
+         // For full-screen alarms we intentionally do NOT set a notification sound here.
+         // The notification is posted to a silent channel and the app's AlarmFullscreenActivity
+         // is explicitly started to play the bundled `res/raw/alarm_tone.mp3` via MediaPlayer.
+         if (fullScreen) {
+             android.util.Log.d("NotificationService", "Full-screen alarm: posting to channel=$channelId without builder.setSound; activity will play audio")
+         } else {
+             // For non-full-screen notifications we can leave the default channel behavior (channel may have sound)
+             android.util.Log.d("NotificationService", "Notification (non-fullscreen) will use channel=$channelId")
+         }
+
+         // Debug: explicitly log the channel sound for visibility (API 26+)
+         try {
+             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                 val ch = notificationManager.getNotificationChannel(channelId)
+                 android.util.Log.d("NotificationService", "Channel '$channelId' sound=${ch?.sound}")
+             }
+         } catch (_: Exception) {}
+
+         // If this is a full-screen alarm, start the AlarmFullscreenActivity directly and skip posting a notification.
+         // Posting a full-screen notification can cause the system to play its own alarm sound on some devices. Starting
+         // the activity directly guarantees only the app's bundled MediaPlayer plays the alarm.
+         if (fullScreen) {
             try {
                 val directIntent = Intent(this, AlarmFullscreenActivity::class.java)
                 // Legacy extras for compatibility
@@ -370,16 +531,18 @@ class NotificationService : Service() {
                 } catch (e: Exception) {
                     android.util.Log.w("NotificationService", "Failed to build alarm_json payload", e)
                 }
+                // Indicate whether the full-screen activity should play the bundled sound
+                try { directIntent.putExtra("play_sound", audible) } catch (_: Exception) {}
 
-                directIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                android.os.Handler(android.os.Looper.getMainLooper()).post {
-                    try {
-                        startActivity(directIntent)
-                        android.util.Log.d("NotificationService", "Started AlarmFullscreenActivity directly for full-screen alarm (no notification posted)")
-                    } catch (e: Exception) {
-                        android.util.Log.e("NotificationService", "Failed to start AlarmFullscreenActivity directly", e)
-                    }
-                }
+                 directIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                 android.os.Handler(android.os.Looper.getMainLooper()).post {
+                     try {
+                         startActivity(directIntent)
+                         android.util.Log.d("NotificationService", "Started AlarmFullscreenActivity directly for full-screen alarm (no notification posted)")
+                     } catch (e: Exception) {
+                         android.util.Log.e("NotificationService", "Failed to start AlarmFullscreenActivity directly", e)
+                     }
+                 }
             } catch (e: Exception) {
                 android.util.Log.e("NotificationService", "Failed to prepare direct AlarmFullscreenActivity intent", e)
             }
@@ -419,6 +582,7 @@ class NotificationService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        try { if (dvrUpdateReceiver != null) { unregisterReceiver(dvrUpdateReceiver); dvrUpdateReceiver = null } } catch (_: Exception) {}
         isRunning = false
         timer?.cancel()
         job.cancel()

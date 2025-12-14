@@ -25,15 +25,25 @@ class DVRGoogleSheetsReader {
                 val csvData = reader.readText()
                 reader.close()
                 parseDvrData(csvData, maxRows)
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 emptyList()
             }
         }
     }
 
+    // Convenience helper that returns the single latest DVR reading (last line in the sheet)
+    suspend fun fetchLatestDvrReading(): GoogleSheetsReader.SensorReading? {
+        val list = fetchLatestDvrReadings(1)
+        return if (list.isNotEmpty()) list[0] else null
+    }
+
     private fun parseDvrData(csvData: String, maxRows: Int): List<GoogleSheetsReader.SensorReading> {
         val readings = mutableListOf<GoogleSheetsReader.SensorReading>()
-        val lines = csvData.lines()
+        // Ignore blank lines which may appear at the end of CSV
+        val lines = csvData.lines().filter { it.trim().isNotEmpty() }
+        // Require at least one data row
+        if (lines.size <= 1) return readings
+        // Start from the last `maxRows` lines but ensure we skip header (index 0)
         val startIndex = (lines.size - maxRows).coerceAtLeast(1)
         for (i in startIndex until lines.size) {
             val line = lines[i]
@@ -43,7 +53,7 @@ class DVRGoogleSheetsReader {
                     val dvrTemp = columns[0].toFloatOrNull() ?: 0f
                     val timestamp = columns[1]
                     val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-                    val date = dateFormat.parse(timestamp)
+                    val date = try { dateFormat.parse(timestamp) } catch (_: Exception) { null }
                     if (date != null) {
                         readings.add(
                             GoogleSheetsReader.SensorReading(
@@ -63,11 +73,12 @@ class DVRGoogleSheetsReader {
                             )
                         )
                     }
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     // Ignore malformed lines
                 }
             }
         }
-        return readings
+        // Return most recent rows first so callers using index 0 get the latest value
+        return readings.reversed()
     }
 }
