@@ -114,7 +114,7 @@ class GoogleSheetsReader {
             // Last resort: try to find the first numeric-looking field (helps when header was missing)
             for (f in fields) {
                 val v = f.trim().trim('"')
-                if (v.isNotEmpty() && v.matches(Regex("^-?\\d+(\\\\.\\d+)?$"))) return f
+                if (v.isNotEmpty() && v.matches(Regex("^-?\\d+(\\.\\d+)?$"))) return f
             }
             return ""
         }
@@ -139,28 +139,32 @@ class GoogleSheetsReader {
                 val outdoorRaw = resolveField(fields, listOf("outdoor", "outdoor_temp", "outdoor temperature", "outsidetemp", "outside", "temp_out", "temperature_out", "outside_temp"), listOf(2, 3))
                 val humidityRaw = resolveField(fields, listOf("humidity", "humid", "rh", "relative_humidity"), listOf(3, 4))
                 val windRaw = resolveField(fields, listOf("wind_speed", "wind speed", "wind", "wind_kmh", "wind_ms"), listOf(4, 5))
-                val windDirRaw = resolveField(fields, listOf("wind_direction", "wind_dir", "winddeg", "wind_deg", "direction", "wind_heading"), listOf(11, 12, 5))
+                // Use column M (Excel column 13 -> zero-based index 12) exclusively for wind direction as requested
+                val windDirRaw = if (fields.size > 12) fields[12] else ""
                 val powerRaw = resolveField(fields, listOf("currentpower", "current_power", "power", "kw", "kW", "power_kw"), listOf(7, 6))
                 val ampsRaw = resolveField(fields, listOf("amps", "currentamps", "current_amps", "amp", "amperes"), listOf(8, 7))
                 val dailyPowerRaw = resolveField(fields, listOf("daily_power", "dailypower", "daily", "day_kwh"), listOf(9, 10))
                 val dvrHeaderCandidates = listOf("dvrtemp", "dvr_temp", "dvr", "dvr_temperature")
                 val dvrRaw = resolveField(fields, dvrHeaderCandidates, listOf(12, 13, 11))
-                // Diagnostic: try to resolve which index was used for dvr (header match or fallback)
+                // Diagnostic: log which value came from column M specifically for wind direction
                 try {
-                    val normalizedHeaders = dvrHeaderCandidates.map { it.trim().lowercase(Locale.getDefault()) }
-                    val matchedHeaderIndex = normalizedHeaders.mapNotNull { headerMap[it] }.firstOrNull()
-                    val fallbackUsed = when {
-                        matchedHeaderIndex != null && matchedHeaderIndex < fields.size -> "header_index=$matchedHeaderIndex"
-                        else -> {
-                            val usedFi = listOf(12,13,11).firstOrNull { it >=0 && it < fields.size }
-                            if (usedFi != null) "fallback_index=$usedFi" else "no_index_found"
-                        }
-                    }
-                    Log.d("GoogleSheetsReader", "DVR field resolved: $dvrRaw (source=$matchedHeaderIndex, fallbackCheck=$fallbackUsed, fields=${fields.size})")
+                    val windDirClean = try { windDirRaw.replace(Regex("""[^0-9+\-\.]""") , "") } catch (_: Exception) { windDirRaw }
+                    Log.d("GoogleSheetsReader", "WindDir (column M) raw='$windDirRaw' cleaned='$windDirClean' fieldsCount=${fields.size}")
                 } catch (_: Exception) {}
+
                 val waterTempRaw = resolveField(fields, listOf("water_temp", "water temperature", "water_temp_c", "geyser_temp", "hot_water_temp"), listOf(5, 6))
                 val waterPressureRaw = resolveField(fields, listOf("water_pressure", "pressure", "geyser_pressure", "water_press"), listOf(6, 5))
                 val dailyWaterRaw = resolveField(fields, listOf("daily_water", "dailywater", "daily_water_volume", "water_daily"), listOf(10, 11))
+
+                // Additional diagnostic: log which header/index was used to resolve wind direction (helps debug stale graph values)
+                try {
+                    val normalizedCandidates = listOf("wind_direction", "wind_dir", "winddeg", "wind_deg", "direction", "wind_heading").map { it.trim().lowercase(Locale.getDefault()) }
+                    val matchedHeaderIndex = normalizedCandidates.mapNotNull { headerMap[it] }.firstOrNull()
+                    val fallbackIndexUsed = if (matchedHeaderIndex == null) listOf(11,12,5).firstOrNull { it >= 0 && it < fields.size } else matchedHeaderIndex
+                    // Clean the raw field by removing any non-numeric characters (e.g. degree symbol, whitespace)
+                    val windDirClean = try { windDirRaw.replace(Regex("""[^0-9+\-\.]""") , "") } catch (_: Exception) { windDirRaw }
+                    Log.d("GoogleSheetsReader", "WindDir resolved: raw='$windDirRaw' cleaned='$windDirClean' headerIndex=$matchedHeaderIndex fallbackIndexUsed=$fallbackIndexUsed fieldsCount=${fields.size}")
+                } catch (_: Exception) {}
 
                 val reading = SensorReading(
                     timestamp = ts,
@@ -168,7 +172,8 @@ class GoogleSheetsReader {
                     outdoorTemp = parseFloat(outdoorRaw),
                     humidity = parseFloat(humidityRaw),
                     windSpeed = parseFloat(windRaw),
-                    windDirection = parseFloat(windDirRaw),
+                    // Parse cleaned wind-direction value (column M) to avoid degree symbols nonsense
+                    windDirection = parseFloat(try { windDirRaw.replace(Regex("""[^0-9+\-\.]""") , "") } catch (_: Exception) { windDirRaw }),
                     currentPower = parseFloat(powerRaw),
                     currentAmps = parseFloat(ampsRaw),
                     dailyPower = parseFloat(dailyPowerRaw),
@@ -328,7 +333,22 @@ class GoogleSheetsReader {
     private fun parseTwoColumnCsvData(csvData: String, maxRows: Int): List<SensorReading> {
         val readings = mutableListOf<SensorReading>()
         val lines = csvData.split("\n").filter { it.trim().isNotEmpty() }
-        for (i in 1 until lines.size) { // skip header
+        if (lines.isEmpty()) return readings
+
+        // Detect if first line is header or data: if first field of first line is numeric -> no header
+        var startIndex = 1 // default: skip header
+        try {
+            val firstLineFields = parseCsvLine(lines[0])
+            val firstField = if (firstLineFields.isNotEmpty()) firstLineFields[0].trim().trim('"') else ""
+            // If the first field looks numeric (allowing comma or dot), then treat as data and start at 0
+            if (firstField.matches(Regex("^[+-]?[0-9]+([.,][0-9]+)?$"))) {
+                startIndex = 0
+            }
+        } catch (_: Exception) {
+            startIndex = 1
+        }
+
+        for (i in startIndex until lines.size) { // start at 0 if no header, else skip header
             val line = lines[i].trim()
             if (line.isEmpty()) continue
             try {
@@ -338,7 +358,11 @@ class GoogleSheetsReader {
                     fields = line.split('\t').map { it.trim() }
                 }
                 if (fields.size >= 2) {
-                    val value = parseFloat(fields[0])
+                    // Robustly clean value field: trim quotes, remove non numeric except dot/comma/+- and convert comma to dot
+                    val rawValue = fields[0].trim().trim('"')
+                    var cleanedValue = try { rawValue.replace(Regex("""[^0-9+\-\.,]"""), "") } catch (_: Exception) { rawValue }
+                    cleanedValue = cleanedValue.replace(',', '.')
+                    val value = parseFloat(cleanedValue)
                     // timestamp may be quoted; trim quotes and spaces
                     val timestamp = fields[1].trim().trim('"')
                     val reading = SensorReading(

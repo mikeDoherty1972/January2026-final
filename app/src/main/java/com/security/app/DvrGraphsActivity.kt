@@ -110,27 +110,33 @@ class DvrGraphsActivity : BaseActivity() {
         if (readings.isNotEmpty()) {
             dvrRawCsvCard.visibility = android.view.View.GONE
             val tempEntries = mutableListOf<Entry>()
+            val timestamps = mutableListOf<String>()
             val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
 
-            readings.forEach { reading ->
+            // Ensure entries are oldest -> newest (left to right on chart)
+            val ordered = readings.reversed()
+
+            ordered.forEachIndexed { idx, reading ->
                 try {
-                    val date = dateFormat.parse(reading.timestamp)
-                    if (date != null) {
-                        tempEntries.add(Entry(date.time.toFloat(), reading.dvrTemp))
-                    }
+                    // store timestamp for x-axis labels
+                    timestamps.add(reading.timestamp)
+                    // use index as x value to avoid float precision issues with epoch millis
+                    tempEntries.add(Entry(idx.toFloat(), reading.dvrTemp))
                 } catch (_: Exception) {
                     // Ignore malformed timestamps
                 }
             }
 
             val dataSet = LineDataSet(tempEntries, "DVR Temp")
-            dataSet.color = "#FF5722".toColorInt()
+            // Use a bright contrasting color against dark background
+            dataSet.color = "#00BCD4".toColorInt() // cyan
             dataSet.setCircleColor(dataSet.color)
             dataSet.setDrawCircles(true)
             dataSet.circleRadius = 1f
-            dataSet.lineWidth = 1.5f
+            dataSet.lineWidth = 1f
             dataSet.valueTextColor = Color.WHITE
             dataSet.setDrawValues(false)
+            dataSet.mode = LineDataSet.Mode.LINEAR
 
             dvrTempChart.clear() // Clear all chart data and settings
             setupChart() // Re-apply chart settings
@@ -139,14 +145,26 @@ class DvrGraphsActivity : BaseActivity() {
 
             val xAxis = dvrTempChart.xAxis
             xAxis.valueFormatter = object : com.github.mikephil.charting.formatter.ValueFormatter() {
-                private val dateFormat = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
+                private val displayFmt = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
                 override fun getFormattedValue(value: Float): String {
-                    return dateFormat.format(Date(value.toLong()))
+                    val idx = value.toInt()
+                    return if (idx >= 0 && idx < timestamps.size) {
+                        try {
+                            val d = dateFormat.parse(timestamps[idx])
+                            if (d != null) displayFmt.format(d) else ""
+                        } catch (_: Exception) { "" }
+                    } else {
+                        ""
+                    }
                 }
             }
+            xAxis.labelRotationAngle = -45f
+            xAxis.granularity = 1f
+
             dvrTempChart.invalidate()
 
-            val latestTempForStatus = readings.last().dvrTemp.toDouble()
+            // Latest value is the last in ordered (newest)
+            val latestTempForStatus = ordered.last().dvrTemp.toDouble()
             val tempStr = String.format(Locale.getDefault(), "%.1f", latestTempForStatus)
             currentDvrStatus.text = getString(R.string.dvr_running_normal, tempStr)
         } else {
