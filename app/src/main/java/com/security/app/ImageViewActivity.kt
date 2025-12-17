@@ -105,7 +105,7 @@ class ImageViewActivity : BaseActivity() {
             val url = imageUrl
             if (url == null) {
                 Log.w("ImageViewActivity", "No IMAGE_URL provided in intent")
-                try { ToastHelper.show(this, "No image URL provided", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
+                finish() // Close activity instead of showing toast
                 return
             }
 
@@ -119,7 +119,8 @@ class ImageViewActivity : BaseActivity() {
             CoroutineScope(Dispatchers.Main).launch {
                 val looksImage = try { withTimeoutOrNull(6000) { isDirectImageUrl(normalized) } ?: false } catch (e: Exception) { false }
                 if (!looksImage) {
-                    try { ToastHelper.show(this@ImageViewActivity, "URL may not point to a direct image — attempting to load anyway", android.widget.Toast.LENGTH_LONG) } catch (_: Exception) {}
+                    Log.w("ImageViewActivity", "URL may not point to a direct image: $normalized")
+                    // Removed toast to prevent system conflicts
                 }
 
                 // Now perform the Glide load (existing code continues)
@@ -130,7 +131,8 @@ class ImageViewActivity : BaseActivity() {
                             Log.w("ImageViewActivity", "Glide load failed for: $urlToLoad", e)
                             loadingSpinner.visibility = View.GONE
                             mainHandler.post {
-                                try { ToastHelper.show(this@ImageViewActivity, "Failed to load image", android.widget.Toast.LENGTH_LONG) } catch (_: Exception) {}
+                                // Show error in a less aggressive way to prevent system toast conflicts
+                                Log.e("ImageViewActivity", "Failed to load image: ${e?.message}")
                             }
                             // reset forceReload so subsequent opens use normal caching
                             forceReload = false

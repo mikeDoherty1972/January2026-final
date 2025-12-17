@@ -13,6 +13,8 @@ import android.net.Network
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.widget.TextView
 import android.widget.Toast
@@ -559,7 +561,10 @@ class SecurityActivity : BaseActivity() {
                 openImageView(url, true)
             } else {
                 Log.w("SecurityActivity", "Card pressed: $zoneName -> no image URL configured")
-                try { ToastHelper.show(this, "No camera image available for $zoneName", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
+                // Use a more conservative approach to avoid system toast conflicts
+                Handler(Looper.getMainLooper()).postDelayed({
+                    try { ToastHelper.show(this, "No camera image available for $zoneName", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
+                }, 100)
             }
         }
 
