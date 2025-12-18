@@ -182,20 +182,19 @@ class NotificationService : Service() {
          val action = intent?.action
          if (action == ACTION_TEST_ALARMS) {
              android.util.Log.d("NotificationService", "Received ACTION_TEST_ALARMS: posting single full-screen test alarm")
-             // Keep test alarms audible for developer testing
-             sendNotification("TEST ALARM", "This is a single full-screen test alarm.", true, true)
+             val title = "TEST ALARM"
+             val message = "This is a single full-screen test alarm."
+             // Policy: keep non-security alarms silent (still full-screen)
+             sendNotification(title, message, true, false)
              return START_NOT_STICKY
          }
 
          if (action == ACTION_SECURITY_ALARM) {
              android.util.Log.d("NotificationService", "Received ACTION_SECURITY_ALARM: posting security full-screen alarm")
-             val i = intent
-             if (i != null) {
-                 val title = i.getStringExtra("alarm_title") ?: "Security Alarm"
-                 val message = i.getStringExtra("alarm_message") ?: "Security breach detected"
-                 // Security alarms should be audible on the full-screen alarm page
-                 sendNotification(title, message, true, true)
-             }
+             val title = intent.getStringExtra("alarm_title") ?: "Security Alarm"
+             val message = intent.getStringExtra("alarm_message") ?: "Security breach detected"
+             // Security alarms should be audible on the full-screen alarm page
+             sendNotification(title, message, true, true)
              return START_NOT_STICKY
          }
 

@@ -8,6 +8,7 @@ import android.widget.TextView
 import android.widget.ImageView
 import android.content.res.ColorStateList
 import androidx.activity.result.ActivityResult
+import androidx.core.content.ContextCompat
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import com.google.android.gms.auth.api.signin.GoogleSignIn
@@ -241,11 +242,10 @@ class ScadaActivity : BaseActivity() {
                     var vp: android.view.ViewParent? = tideInfoTextView.parent
                     while (vp != null) {
                         if (vp is androidx.cardview.widget.CardView) {
-                            val card = vp as androidx.cardview.widget.CardView
-                            card.isClickable = true
-                            card.isLongClickable = true
-                            card.setOnClickListener { showStormglassKeyDialog() }
-                            card.setOnLongClickListener { showStormglassKeyDialog(); true }
+                            vp.isClickable = true
+                            vp.isLongClickable = true
+                            vp.setOnClickListener { showStormglassKeyDialog() }
+                            vp.setOnLongClickListener { showStormglassKeyDialog(); true }
                             break
                         }
                         vp = vp.parent
@@ -1698,6 +1698,24 @@ class ScadaActivity : BaseActivity() {
             }
         } catch (e: Exception) {
             Log.w("ScadaActivity", "applyLightsBackendSelection failed", e)
+        }
+    }
+
+    // After views are set up in onCreate or when data refresh completes, update the badge
+    private fun updateScadaStatusBadge(isOnline: Boolean) {
+        val badge: TextView? = findViewById(R.id.scadaStatusBadge)
+        if (badge != null) {
+            if (isOnline) {
+                badge.text = "Online"
+                badge.setBackgroundResource(R.drawable.status_badge_background)
+                badge.setTextColor(ContextCompat.getColor(this, android.R.color.white))
+            } else {
+                badge.text = "Offline"
+                // Use a red background variant if available; fallback by tinting via background swap
+                badge.setBackgroundResource(R.drawable.status_badge_background)
+                badge.background.setTint(ContextCompat.getColor(this, android.R.color.holo_red_light))
+                badge.setTextColor(ContextCompat.getColor(this, android.R.color.white))
+            }
         }
     }
 

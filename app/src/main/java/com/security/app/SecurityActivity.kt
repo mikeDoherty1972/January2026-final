@@ -535,14 +535,14 @@ class SecurityActivity : BaseActivity() {
         // Full list of Drive image URLs (nullable so missing cameras show a friendly message)
         // These are defaults; the user can override any of them by setting SharedPreferences keys like "camera_door_url"
         val defaults: Map<String, String?> = mapOf(
-            "garage" to "https://drive.google.com/uc?export=download&id=1i7yQEZAIEwjB1aYfN0jKUwVdOKhL2uBr",
-            "garage_side" to "https://drive.google.com/uc?export=download&id=1mZTC_6Nb4thZAQvH4bafJVwO6p8yB6KH",
-            "south" to "https://drive.google.com/uc?export=download&id=1Fw9dvmwaWkw8RjCi18Zr_fUdXzN5MApw",
-            "back" to "https://drive.google.com/uc?export=download&id=1D-RC21Z5p9atX1xTle31uDlA1dgqAAJ-",
-            "north" to "https://drive.google.com/uc?export=download&id=1uPhu1YBPCTVtDog8a7TdTOt8zI2x3s_L",
-            "front" to "https://drive.google.com/uc?export=download&id=1aGcQTvdpYNsmUNOLN-4TFruxk7MTu-wg",
-            // Door default: use the user-provided Drive file (converted to direct-download form)
-            "door" to "https://drive.google.com/uc?export=download&id=1Ngq-uxaXuoHFySX-ynU1vwafeRh5InU5"
+            "garage" to "https://lh3.googleusercontent.com/d/1i7yQEZAIEwjB1aYfN0jKUwVdOKhL2uBr",
+            "garage_side" to "https://lh3.googleusercontent.com/d/1mZTC_6Nb4thZAQvH4bafJVwO6p8yB6KH",
+            "south" to "https://lh3.googleusercontent.com/d/1Fw9dvmwaWkw8RjCi18Zr_fUdXzN5MApw",
+            "back" to "https://lh3.googleusercontent.com/d/1D-RC21Z5p9atX1xTle31uDlA1dgqAAJ-",
+            "north" to "https://lh3.googleusercontent.com/d/1uPhu1YBPCTVtDog8a7TdTOt8zI2x3s_L",
+            "front" to "https://lh3.googleusercontent.com/d/1aGcQTvdpYNsmUNOLN-4TFruxk7MTu-wg",
+            // Door default: use the user-provided Drive file (converted to direct GoogleUserContent URL)
+            "door" to "https://lh3.googleusercontent.com/d/1Ngq-uxaXuoHFySX-ynU1vwafeRh5InU5"
         )
 
         // Allow overrides from shared prefs: keys of the form camera_<key>_url, e.g. camera_door_url

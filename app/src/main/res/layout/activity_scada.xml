@@ -1029,7 +1029,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="12dp"
                         android:text="Sent TXT: -- | Y21_read: 0 | Last Command: --"
-                        android:textColor="?android:attr/textColorSecondary"
+                        android:textColor="@color/light_grey"
                         android:textSize="12sp"
                         android:gravity="center" />
 
@@ -1047,7 +1047,7 @@
                 android:layout_height="wrap_content"
                 android:text="👨‍⚕️ System Health"
                 android:textSize="18sp"
-                android:textColor="?android:attr/textColorPrimary"
+                android:textColor="#FFFFFF"
                 android:textStyle="bold"
                 android:layout_marginBottom="12dp" />
 
@@ -1063,7 +1063,7 @@
                     android:layout_height="wrap_content"
                     android:text="Last Update: --:--\nWater Temperature: Online\nWater Pressure: Online\nMain Controller: Ready"
                     android:textSize="14sp"
-                    android:textColor="?android:attr/textColorSecondary"
+                    android:textColor="#B0BEC5"
                     android:padding="16dp" />
 
             </androidx.cardview.widget.CardView>
@@ -1154,6 +1154,56 @@
                 android:layout_gravity="center_horizontal"
                 android:layout_marginTop="16dp"
                 android:layout_marginBottom="16dp" />
+
+            <!-- Add a small status badge at the bottom of the SCADA card/container -->
+            <!-- Assuming the SCADA card root uses ConstraintLayout; if not, this TextView will still be added near the end -->
+            <TextView
+                android:id="@+id/scadaStatusBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Online"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:paddingLeft="10dp"
+                android:paddingRight="10dp"
+                android:paddingTop="6dp"
+                android:paddingBottom="6dp"
+                android:textColor="@android:color/white"
+                android:background="@drawable/status_badge_background"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="8dp"
+                android:layout_marginEnd="8dp"
+                android:layout_marginStart="8dp"
+                android:gravity="center"
+                android:contentDescription="SCADA status badge"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent" />
+
+            <!-- Inside the SCADA card container, add a small status badge at the bottom -->
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:id="@+id/scadaCardContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <!-- FCM/Connectivity status badge (red variant applied via background) -->
+                <TextView
+                    android:id="@+id/scadaStatusBadgeFcm"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="FCM"
+                    android:textSize="12sp"
+                    android:textColor="#FFFFFF"
+                    android:paddingLeft="8dp"
+                    android:paddingTop="4dp"
+                    android:paddingRight="8dp"
+                    android:paddingBottom="4dp"
+                    android:background="@drawable/status_badge_background_red"
+                    android:visibility="gone"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    android:layout_margin="8dp" />
+
+            </androidx.constraintlayout.widget.ConstraintLayout>
 
         </LinearLayout>
 

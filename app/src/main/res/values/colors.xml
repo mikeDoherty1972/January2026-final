@@ -1,9 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="light_grey">#F5F5F5</color>
-    <color name="dark_grey">#E0E0E0</color>
+    <!-- Explicit colors for System Health card -->
+    <color name="system_health_title">#FFFFFF</color>
+    <color name="system_health_body">#B0BEC5</color>
+
+    <!-- Colors for Power Graphs screen -->
+    <color name="power_graph_title">#FFFFFF</color>
+    <color name="power_graph_desc">#B0BEC5</color>
+
+    <!-- Shared graph colors for all graph screens -->
+    <color name="graph_title">#FFFFFF</color>
+    <color name="graph_desc">#B0BEC5</color>
+    <color name="graph_accent">#4CAF50</color>
+
+    <!-- Missing color definitions -->
     <color name="blue_grey">#607D8B</color>
-    <color name="black">#FF000000</color>
-    <color name="white">#FFFFFFFF</color>
-    <color name="colorAccent">#607D8B</color>
+    <color name="dark_grey">#424242</color>
+    <color name="light_grey">#E0E0E0</color>
+    <color name="white">#FFFFFF</color>
+    <color name="black">#000000</color>
+    <color name="colorAccent">#FF4081</color>
 </resources>

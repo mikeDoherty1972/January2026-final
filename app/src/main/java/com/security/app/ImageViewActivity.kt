@@ -52,7 +52,7 @@ class ImageViewActivity : BaseActivity() {
             return busted
         }
 
-        // Convert common Google Drive share URLs into a direct-download URL usable by Glide.
+        // Convert common Google Drive share URLs into a direct image URL usable by Glide.
         fun normalizeDriveUrl(raw: String): String {
             try {
                 val url = raw.trim()
@@ -60,12 +60,14 @@ class ImageViewActivity : BaseActivity() {
                 val fileIdRegex = Regex("/d/([A-Za-z0-9_-]+)")
                 val m1 = fileIdRegex.find(url)
                 if (m1 != null) {
-                    return "https://drive.google.com/uc?export=download&id=${m1.groupValues[1]}"
+                    // Use the direct view URL without download - works better with SSL and public images
+                    return "https://lh3.googleusercontent.com/d/${m1.groupValues[1]}"
                 }
-                // Pattern: ?id=<id> or &id=<id> (e.g. open?id=FILE_ID)
+                // Pattern: ?id=<id> or &id=<id> (e.g. open?id=FILE_ID or uc?export=download&id=FILE_ID or thumbnail?id=FILE_ID)
                 val idParam = Regex("[?&]id=([A-Za-z0-9_-]+)").find(url)
                 if (idParam != null) {
-                    return "https://drive.google.com/uc?export=download&id=${idParam.groupValues[1]}"
+                    // Use the direct view URL without download - works better with SSL and public images
+                    return "https://lh3.googleusercontent.com/d/${idParam.groupValues[1]}"
                 }
                 // Fallback: return original
                 return url
@@ -112,12 +114,22 @@ class ImageViewActivity : BaseActivity() {
             // Normalize Drive share links into a direct image URL, then apply cache-busting if requested
             val normalized = normalizeDriveUrl(url)
             val urlToLoad = withCacheBusterIfNeeded(normalized)
+            Log.d("ImageViewActivity", "Original URL: $url")
+            Log.d("ImageViewActivity", "Normalized URL: $normalized")
             Log.d("ImageViewActivity", "Loading image: $urlToLoad (forceReload=$forceReload)")
             loadingSpinner.visibility = View.VISIBLE
 
             // Heuristic check: if the URL doesn't look like a direct image, inform the user (but still try Glide as fallback)
             CoroutineScope(Dispatchers.Main).launch {
-                val looksImage = try { withTimeoutOrNull(6000) { isDirectImageUrl(normalized) } ?: false } catch (e: Exception) { false }
+                // Skip the HEAD request check for Google Drive URLs to avoid SSL issues
+                val isGoogleDrive = normalized.contains("lh3.googleusercontent.com") || normalized.contains("drive.google.com")
+                val looksImage = if (isGoogleDrive) {
+                    Log.d("ImageViewActivity", "Skipping HEAD check for Google Drive URL")
+                    true // Assume Google Drive URLs are valid images
+                } else {
+                    try { withTimeoutOrNull(6000) { isDirectImageUrl(normalized) } ?: false } catch (e: Exception) { false }
+                }
+
                 if (!looksImage) {
                     Log.w("ImageViewActivity", "URL may not point to a direct image: $normalized")
                     // Removed toast to prevent system conflicts
@@ -128,11 +140,15 @@ class ImageViewActivity : BaseActivity() {
                     .load(urlToLoad)
                     .listener(object : RequestListener<android.graphics.drawable.Drawable> {
                         override fun onLoadFailed(e: GlideException?, model: Any?, target: Target<android.graphics.drawable.Drawable>?, isFirstResource: Boolean): Boolean {
-                            Log.w("ImageViewActivity", "Glide load failed for: $urlToLoad", e)
+                            val errorMsg = e?.message ?: "Unknown error"
+                            val rootCauses = e?.rootCauses?.joinToString("; ") { it.message ?: "Unknown cause" } ?: "No root causes"
+                            Log.w("ImageViewActivity", "Glide load failed for: $urlToLoad")
+                            Log.w("ImageViewActivity", "Error: $errorMsg")
+                            Log.w("ImageViewActivity", "Root causes: $rootCauses")
                             loadingSpinner.visibility = View.GONE
                             mainHandler.post {
                                 // Show error in a less aggressive way to prevent system toast conflicts
-                                Log.e("ImageViewActivity", "Failed to load image: ${e?.message}")
+                                Log.e("ImageViewActivity", "Failed to load image - Error: $errorMsg, Root causes: $rootCauses")
                             }
                             // reset forceReload so subsequent opens use normal caching
                             forceReload = false

@@ -31,7 +31,7 @@
                 android:layout_height="wrap_content"
                 android:text="📅 DVR Temperature Monitoring"
                 android:textSize="20sp"
-                android:textColor="#ffffff"
+                android:textColor="@color/graph_title"
                 android:textStyle="bold" />
 
             <TextView
@@ -40,7 +40,7 @@
                 android:layout_height="wrap_content"
                 android:text="← Back"
                 android:textSize="16sp"
-                android:textColor="#4CAF50"
+                android:textColor="@color/graph_accent"
                 android:padding="8dp"
                 android:background="?android:attr/selectableItemBackground" />
 
@@ -67,7 +67,7 @@
                     android:layout_height="wrap_content"
                     android:text="🖥️ Current DVR Status"
                     android:textSize="16sp"
-                    android:textColor="#ffffff"
+                    android:textColor="@color/graph_title"
                     android:textStyle="bold"
                     android:layout_marginBottom="8dp" />
 
@@ -77,7 +77,7 @@
                     android:layout_height="wrap_content"
                     android:text="🔍 Loading DVR status..."
                     android:textSize="18sp"
-                    android:textColor="#4CAF50"
+                    android:textColor="@color/graph_accent"
                     android:textStyle="bold" />
 
             </LinearLayout>
@@ -104,7 +104,7 @@
                     android:layout_height="wrap_content"
                     android:text="🌡️ DVR Temperature Trends"
                     android:textSize="16sp"
-                    android:textColor="#ffffff"
+                    android:textColor="@color/graph_title"
                     android:textStyle="bold"
                     android:layout_marginBottom="8dp" />
 
@@ -138,7 +138,7 @@
                     android:layout_height="wrap_content"
                     android:text="🎯 Temperature Thresholds"
                     android:textSize="14sp"
-                    android:textColor="#ffffff"
+                    android:textColor="@color/graph_title"
                     android:textStyle="bold"
                     android:layout_marginBottom="8dp" />
 
@@ -147,7 +147,7 @@
                     android:layout_height="wrap_content"
                     android:text="🟢 Normal: Below 35°C\n🟡 Warm: 35°C - 45°C\n🔴 Hot: Above 45°C"
                     android:textSize="12sp"
-                    android:textColor="#cccccc"
+                    android:textColor="@color/graph_desc"
                     android:lineSpacingExtra="4dp" />
 
             </LinearLayout>
@@ -158,9 +158,9 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="📊 Data source: Google Sheets (Last 24 hours)"
+            android:text="📈 Data source: Google Sheets (Last 24 hours)"
             android:textSize="12sp"
-            android:textColor="#888888"
+            android:textColor="@color/graph_desc"
             android:layout_gravity="center"
             android:layout_marginTop="8dp" />
 
@@ -186,7 +186,7 @@
                     android:layout_height="wrap_content"
                     android:text="🔎 Trend CSV Preview"
                     android:textSize="14sp"
-                    android:textColor="#ffffff"
+                    android:textColor="@color/graph_title"
                     android:textStyle="bold"
                     android:layout_marginBottom="8dp" />
 
@@ -196,7 +196,7 @@
                     android:layout_height="wrap_content"
                     android:text=""
                     android:textSize="12sp"
-                    android:textColor="#cccccc"
+                    android:textColor="@color/graph_desc"
                     android:lineSpacingExtra="2dp" />
 
             </LinearLayout>

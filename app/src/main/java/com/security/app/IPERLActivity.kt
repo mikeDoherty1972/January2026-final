@@ -92,23 +92,24 @@ class IPERLActivity : BaseActivity() {
                 // Stop pull-to-refresh spinner if active
                 try { findViewById<androidx.swiperefreshlayout.widget.SwipeRefreshLayout>(R.id.iperlSwipeRefresh).isRefreshing = false } catch (_: Exception) {}
                 if (readings.isNotEmpty()) {
-                    // Show most recent reading
+                    // Show most recent reading for mike water meter display only
                     val latest = readings.last()
                     val meterVal = latest.meterReading
                     mikeWaterReading.text = getString(R.string.mike_water_liters_format, meterVal.toInt())
                     mikeWaterStatus.text = getString(R.string.status_active)
                     mikeWaterStatus.setTextColor(getColor(android.R.color.holo_green_light))
 
-                    // Update lastUpdate and totals if available (locale-safe)
-                    totalUsage.text = String.format(Locale.getDefault(), "%.3f L", meterVal)
-                    val timeStr = try { SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault()).format(latest.date) } catch (_: Exception) { "--" }
-                    lastUpdate.text = getString(R.string.last_update_format, timeStr)
+                    // Note: totalUsage and lastUpdate are handled by iperlUsageStats from stats sheet
                 } else {
                     mikeWaterReading.text = getString(R.string.no_data_label)
                     mikeWaterStatus.text = getString(R.string.no_data_label)
                     mikeWaterStatus.setTextColor(getColor(android.R.color.holo_orange_light))
-                    totalUsage.text = "-- L"
-                    lastUpdate.text = getString(R.string.last_update_format, "--")
+
+                    // Only clear these if no stats data is available
+                    if (totalUsage.text == "-- L") {
+                        totalUsage.text = "-- L"
+                        lastUpdate.text = getString(R.string.last_update_format, "--")
+                    }
                 }
             }
         }

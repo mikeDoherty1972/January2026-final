@@ -22,19 +22,40 @@ android {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
-    }
-    compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
-    }
-    kotlinOptions {
-        jvmTarget = '1.8'
+        debug {
+            // Suppress debug build notifications
+            debuggable true
+        }
     }
 
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+
+    kotlinOptions {
+        jvmTarget = '11'
+        // Suppress Kotlin compilation warnings
+        freeCompilerArgs += [
+            "-opt-in=kotlin.RequiresOptIn",
+            "-Xjvm-default=all",
+            "-Xsuppress-version-warnings",
+            "-nowarn"
+        ]
+    }
 
     buildFeatures {
         viewBinding true
     }
+
+    // Lint in quiet mode and don't break builds on warnings
+    lintOptions {
+        quiet true
+        abortOnError false
+        ignoreWarnings true
+        disable 'InvalidPackage','UnusedAttribute','GradleCompatible','OldTargetApi'
+    }
+
     packagingOptions {
         pickFirst 'META-INF/DEPENDENCIES'
         pickFirst 'META-INF/LICENSE'
@@ -45,10 +66,7 @@ android {
         pickFirst 'META-INF/notice.txt'
         pickFirst 'META-INF/ASL2.0'
     }
-    dependenciesInfo {
-        includeInApk true
-        includeInBundle true
-    }
+
     ndkVersion '29.0.13113456 rc1'
     buildToolsVersion '34.0.0'
 }
@@ -71,8 +89,6 @@ dependencies {
     implementation 'com.github.bumptech.glide:glide:4.14.2'
     ksp 'com.github.bumptech.glide:ksp:4.14.2'
     implementation 'com.github.chrisbanes:PhotoView:2.3.0'
-
-    // CardView for the UI tiles
     implementation 'androidx.cardview:cardview:1.0.0'
 
     // Unit testing

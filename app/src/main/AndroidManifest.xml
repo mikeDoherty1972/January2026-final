@@ -22,7 +22,7 @@
 
     <application
         android:allowBackup="true"
-        android:name=".App"
+        android:name=".SecurityApp"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
@@ -97,6 +97,11 @@
             android:theme="@style/Theme.SecurityApp"
             android:parentActivityName=".MainActivity" />
 
+        <activity
+            android:name=".IDSActivity"
+            android:exported="false"
+            android:theme="@style/Theme.SecurityApp"
+            android:parentActivityName=".MainActivity" />
 
         <!-- Full-screen alarm: ensure the exact class used in code is declared so a pending intent or direct startActivity works -->
         <activity
@@ -139,6 +144,15 @@
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="@string/default_notification_channel_id" />
+
+        <!-- Suppress Firebase component discovery build notifications -->
+        <meta-data
+            android:name="firebase_analytics_collection_enabled"
+            android:value="false" />
+
+        <meta-data
+            android:name="google_analytics_automatic_screen_reporting_enabled"
+            android:value="false" />
 
     </application>
 
