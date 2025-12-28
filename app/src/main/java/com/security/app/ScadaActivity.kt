@@ -50,8 +50,21 @@ import java.io.InputStreamReader
 import java.text.SimpleDateFormat
 import java.util.TimeZone
 import kotlin.math.*
+import com.google.firebase.messaging.FirebaseMessaging
+import android.os.Handler
+import android.os.Looper
 
 class ScadaActivity : BaseActivity() {
+
+    // FCM status handler and runnable for periodic checks
+    private val fcmStatusHandler = Handler(Looper.getMainLooper())
+    private val fcmStatusRunnable = object : Runnable {
+        override fun run() {
+            try { checkFcmStatus() } catch (_: Exception) {}
+            // schedule next check in 1 hour
+            fcmStatusHandler.postDelayed(this, 60 * 60 * 1000L)
+        }
+    }
 
     private lateinit var ampsTextView: TextView
     private lateinit var kwTextView: TextView
@@ -164,6 +177,10 @@ class ScadaActivity : BaseActivity() {
     // Drive polling job (so we can cancel it when switching backends)
     private var drivePollingJob: kotlinx.coroutines.Job? = null
 
+    // Dashboard lights controller buttons (duplicated controller on the dashboard page)
+    private var dashLightsOnBtn: android.widget.Button? = null
+    private var dashLightsOffBtn: android.widget.Button? = null
+
     // Google Drive API
     private lateinit var googleSignInClient: GoogleSignInClient
     private var driveService: Drive? = null
@@ -178,6 +195,18 @@ class ScadaActivity : BaseActivity() {
         Log.d("ScadaActivity", "onCreate called")
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_scada)
+        // Kick off initial FCM status check soon after UI binds
+        try { fcmStatusHandler.postDelayed(fcmStatusRunnable, 5_000L) } catch (_: Exception) {}
+
+        // Handle dashboard intent for lights quick action
+        try {
+            val action = intent?.getStringExtra("lights_action")
+            if (action == "on") {
+                try { LightsService().writeOutsideLights(this@ScadaActivity, true) } catch (e: Exception) { Log.w("ScadaActivity", "writeOutsideLights(true) failed: ${e.message}") }
+            } else if (action == "off") {
+                try { LightsService().writeOutsideLights(this@ScadaActivity, false) } catch (e: Exception) { Log.w("ScadaActivity", "writeOutsideLights(false) failed: ${e.message}") }
+            }
+        } catch (e: Exception) { Log.w("ScadaActivity", "Reading lights_action failed: ${e.message}") }
 
         // Initialize Activity Result launcher for Google Sign-In
         signInLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result: ActivityResult ->
@@ -223,6 +252,28 @@ class ScadaActivity : BaseActivity() {
         // status dots
         alarmStatusDot = findViewById(R.id.alarmStatusDot)
         dvrStatusDot = findViewById(R.id.dvrStatusDot)
+
+        // Hook up dashboard lights controller (if present in the layout)
+        try {
+            dashLightsOnBtn = findViewById(R.id.dashboardLightsOnButton)
+            dashLightsOffBtn = findViewById(R.id.dashboardLightsOffButton)
+            dashLightsOnBtn?.apply {
+                isEnabled = true
+                setOnClickListener {
+                    LightsService().writeOutsideLights(this@ScadaActivity, true)
+                    try { startLightsPolling() } catch (_: Exception) {}
+                }
+            }
+            dashLightsOffBtn?.apply {
+                isEnabled = true
+                setOnClickListener {
+                    LightsService().writeOutsideLights(this@ScadaActivity, false)
+                    try { startLightsPolling() } catch (_: Exception) {}
+                }
+            }
+        } catch (e: Exception) {
+            Log.w("ScadaActivity", "Dashboard lights controller wiring skipped", e)
+        }
 
         // New: bind sun/tide views (layout added)
         try {
@@ -326,157 +377,34 @@ class ScadaActivity : BaseActivity() {
         // Setup lights control buttons
         val lightsOnButton = findViewById<android.widget.Button>(R.id.lightsOnButton)
         val lightsOffButton = findViewById<android.widget.Button>(R.id.lightsOffButton)
-        // Enable buttons immediately so users can send Firebase/bridge commands even when Drive isn't signed-in.
         lightsOnButton.isEnabled = true
         lightsOffButton.isEnabled = true
         Log.d("ScadaActivity", "Lights buttons enabled at startup")
-        // New: Firestore-based lights commands (replace Drive-based flow)
-        val dbFs = FirebaseFirestore.getInstance()
-        // Bridge expects Flights_commands/current_command — write there as well for compatibility with the local bridge
-        val bridgeCmdDoc = dbFs.collection("Flights_commands").document("current_command")
 
-        // Helper that writes a bridge-compatible payload to Flights_commands/current_command
-        fun writeBridgeCommand(desired: Boolean, onSuccess: (() -> Unit)? = null, onFailure: ((Exception) -> Unit)? = null) {
-            try {
-                val bridgePayload = hashMapOf<String, Any>(
-                    "desired" to desired,
-                    "desired_ts" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
-                    "command" to if (desired) "on" else "off",
-                    "command_ts" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
-                    "command_source" to "android_app"
-                )
-
-                bridgeCmdDoc.set(bridgePayload, com.google.firebase.firestore.SetOptions.merge())
-                    .addOnSuccessListener {
-                        Log.d("ScadaActivity", "Wrote bridge command doc (desired=$desired)")
-                        // Read back the document to confirm the write landed and log/notify user for debugging
-                        try {
-                            bridgeCmdDoc.get()
-                                .addOnSuccessListener { bdoc ->
-                                    Log.d("ScadaActivity", "bridgeCmdDoc after write: ${bdoc.data}")
-                                    val sb = bdoc.data?.toString() ?: "(no bridge doc)"
-                                    try { ToastHelper.show(this@ScadaActivity, getString(R.string.bridge_doc_readback, sb), android.widget.Toast.LENGTH_LONG) } catch (_: Exception) {}
-                                }
-                                .addOnFailureListener { e -> Log.w("ScadaDiag", "Failed reading bridgeCmdDoc", e) }
-                        } catch (e: Exception) {
-                            Log.w("ScadaDiag", "Readback failed", e)
-                        }
-                        onSuccess?.invoke()
-                    }
-                    .addOnFailureListener { e ->
-                        Log.e("ScadaActivity", "Failed writing bridge command doc", e)
-                        // Log current auth state for diagnosis
-                        try {
-                            val currentUser = auth?.currentUser
-                            Log.d("ScadaActivity", "Firebase auth currentUser uid=${currentUser?.uid} email=${currentUser?.email}")
-                        } catch (_: Exception) {}
-
-                        // Enhanced handling: if PERMISSION_DENIED, prompt user to re-authenticate
-                        val isPermError = try {
-                            (e is com.google.firebase.firestore.FirebaseFirestoreException && e.code == com.google.firebase.firestore.FirebaseFirestoreException.Code.PERMISSION_DENIED)
-                                    || (e?.message?.contains("PERMISSION_DENIED", ignoreCase = true) == true)
-                        } catch (_: Exception) { false }
-
-                        if (isPermError) {
-                            runOnUiThread {
-                                try {
-                                    androidx.appcompat.app.AlertDialog.Builder(this@ScadaActivity)
-                                        .setTitle(R.string.error_short)
-                                        .setMessage("Permission error sending bridge command:\n${e?.message}\n\nWould you like to sign in to Google to restore permissions?")
-                                        .setPositiveButton(android.R.string.ok, { _, _ -> try { ensureFreshGoogleSignIn() } catch (_: Exception) {} })
-                                        .setNegativeButton(android.R.string.cancel, null)
-                                        .show()
-                                } catch (_: Exception) {
-                                    try { ToastHelper.show(this@ScadaActivity, "Permission error: ${e?.message}", android.widget.Toast.LENGTH_LONG) } catch (_: Exception) {}
-                                }
-                            }
-                        } else {
-                            onFailure?.invoke(e)
-                        }
-                    }
-            } catch (e: Exception) {
-                Log.e("ScadaActivity", "Exception preparing bridge payload", e)
-                onFailure?.invoke(e)
+        // Use centralized LightsService for bridge writes (removes duplication)
+        lightsOnButton.setOnClickListener {
+            Log.d("ScadaActivity", "Lights ON clicked — using LightsService")
+            val ok = LightsService().writeOutsideLights(this@ScadaActivity, true)
+            if (ok) {
+                try { ToastHelper.show(this@ScadaActivity, getString(R.string.bridge_command_on_sent), android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
+            } else {
+                try { ToastHelper.show(this@ScadaActivity, getString(R.string.failed_send_bridge_command, "service write failed"), android.widget.Toast.LENGTH_LONG) } catch (_: Exception) {}
             }
+            try { fetchLightsStatusOnce() } catch (_: Exception) {}
+        }
+        lightsOffButton.setOnClickListener {
+            Log.d("ScadaActivity", "Lights OFF clicked — using LightsService")
+            val ok = LightsService().writeOutsideLights(this@ScadaActivity, false)
+            if (ok) {
+                try { ToastHelper.show(this@ScadaActivity, getString(R.string.bridge_command_off_sent), android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
+            } else {
+                try { ToastHelper.show(this@ScadaActivity, getString(R.string.failed_send_bridge_command, "service write failed"), android.widget.Toast.LENGTH_LONG) } catch (_: Exception) {}
+            }
+            try { fetchLightsStatusOnce() } catch (_: Exception) {}
         }
 
-        lightsOnButton.setOnClickListener {
-             Log.d("ScadaActivity", "Lights ON clicked — writing bridge command")
-             writeBridgeCommand(true,
-                 onSuccess = {
-                     ToastHelper.show(this@ScadaActivity, getString(R.string.bridge_command_on_sent), android.widget.Toast.LENGTH_SHORT)
-                     try { startLightsPolling() } catch (_: Exception) {}
-                 },
-                 onFailure = { e ->
-                     Log.e("ScadaActivity", "Lights ON write failed", e)
-                     try {
-                         val currentUser = auth?.currentUser
-                         Log.d("ScadaActivity", "auth.currentUser uid=${currentUser?.uid} email=${currentUser?.email}")
-                     } catch (_: Exception) {}
-                     val errMsg = try { e?.message ?: e.toString() } catch (_: Exception) { "Unknown error" }
-                     val isPerm = try {
-                         (e is com.google.firebase.firestore.FirebaseFirestoreException && e.code == com.google.firebase.firestore.FirebaseFirestoreException.Code.PERMISSION_DENIED)
-                                 || errMsg.contains("PERMISSION_DENIED", ignoreCase = true)
-                     } catch (_: Exception) { false }
-                     if (isPerm) {
-                         runOnUiThread {
-                             try {
-                                 androidx.appcompat.app.AlertDialog.Builder(this@ScadaActivity)
-                                     .setTitle(R.string.error_short)
-                                     .setMessage("Permission error sending bridge command:\n$errMsg\n\nWould you like to sign in to Google to restore permissions?")
-                                     .setPositiveButton(android.R.string.ok, { _, _ -> try { ensureFreshGoogleSignIn() } catch (_: Exception) {} })
-                                     .setNegativeButton(android.R.string.cancel, null)
-                                     .show()
-                             } catch (_: Exception) {
-                                 try { ToastHelper.show(this@ScadaActivity, "Permission error: $errMsg", android.widget.Toast.LENGTH_LONG) } catch (_: Exception) {}
-                             }
-                         }
-                     } else {
-                         try { ToastHelper.show(this@ScadaActivity, getString(R.string.failed_send_bridge_command, errMsg), android.widget.Toast.LENGTH_LONG) } catch (_: Exception) {}
-                         try { ensureFreshGoogleSignIn() } catch (_: Exception) {}
-                     }
-                 }
-             )
-         }
-
-         lightsOffButton.setOnClickListener {
-             Log.d("ScadaActivity", "Lights OFF clicked — writing bridge command")
-             writeBridgeCommand(false,
-                 onSuccess = {
-                     ToastHelper.show(this@ScadaActivity, getString(R.string.bridge_command_off_sent), android.widget.Toast.LENGTH_SHORT)
-                     try { startLightsPolling() } catch (_: Exception) {}
-                 },
-                 onFailure = { e ->
-                     Log.e("ScadaActivity", "Lights OFF write failed", e)
-                     try {
-                         val currentUser = auth?.currentUser
-                         Log.d("ScadaActivity", "auth.currentUser uid=${currentUser?.uid} email=${currentUser?.email}")
-                     } catch (_: Exception) {}
-                     val errMsg = try { e?.message ?: e.toString() } catch (_: Exception) { "Unknown error" }
-                     val isPerm = try {
-                         (e is com.google.firebase.firestore.FirebaseFirestoreException && e.code == com.google.firebase.firestore.FirebaseFirestoreException.Code.PERMISSION_DENIED)
-                                 || errMsg.contains("PERMISSION_DENIED", ignoreCase = true)
-                     } catch (_: Exception) { false }
-                     if (isPerm) {
-                         runOnUiThread {
-                             try {
-                                 androidx.appcompat.app.AlertDialog.Builder(this@ScadaActivity)
-                                     .setTitle(R.string.error_short)
-                                     .setMessage("Permission error sending bridge command:\n$errMsg\n\nWould you like to sign in to Google to restore permissions?")
-                                     .setPositiveButton(android.R.string.ok, { _, _ -> try { ensureFreshGoogleSignIn() } catch (_: Exception) {} })
-                                     .setNegativeButton(android.R.string.cancel, null)
-                                     .show()
-                             } catch (_: Exception) {
-                                 try { ToastHelper.show(this@ScadaActivity, "Permission error: $errMsg", android.widget.Toast.LENGTH_LONG) } catch (_: Exception) {}
-                             }
-                         }
-                     } else {
-                         try { ToastHelper.show(this@ScadaActivity, getString(R.string.failed_send_bridge_command, errMsg), android.widget.Toast.LENGTH_LONG) } catch (_: Exception) {}
-                         try { ensureFreshGoogleSignIn() } catch (_: Exception) {}
-                     }
-                 }
-             )
-         }
+        // Expose lights control for intent quick action
+        // (removed local function; now call class-level toggleOutsideLights)
 
         // Setup click listeners for graphs
         setupGraphClickListeners()
@@ -529,11 +457,137 @@ class ScadaActivity : BaseActivity() {
             refreshData()
             swipeRefreshLayout.isRefreshing = false
         }
+
+        // New: refresh lights authorization status on create
+        refreshLightsAuthorizationStatus()
+    }
+
+    private fun refreshLightsAuthorizationStatus() {
+        val view = findViewById<TextView>(R.id.lightsAuthStatus)
+        if (view != null) {
+            val authorized = try { LightsService().isUserAuthorizedForLights() } catch (t: Throwable) { false }
+            view.text = if (authorized) "Lights authorization: Authorized" else "Lights authorization: Not authorized"
+            // Color hint: green when authorized, red otherwise
+            val color = if (authorized) 0xFF4CAF50.toInt() else 0xFFFF5252.toInt()
+            view.setTextColor(color)
+        }
     }
 
     private fun refreshData() {
         monitorGeyserData()
         try { ToastHelper.show(this@ScadaActivity, "Data refreshed", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Run an immediate check and (re)start hourly checks while the Activity is in foreground
+        try {
+            checkFcmStatus()
+            fcmStatusHandler.removeCallbacks(fcmStatusRunnable)
+            fcmStatusHandler.postDelayed(fcmStatusRunnable, 60 * 60 * 1000L)
+        } catch (_: Exception) {}
+
+        // New: refresh lights authorization status on resume
+        refreshLightsAuthorizationStatus()
+    }
+
+    override fun onPause() {
+        // Stop periodic checks when not visible to prevent misleading stale status
+        try { fcmStatusHandler.removeCallbacks(fcmStatusRunnable) } catch (_: Exception) {}
+        super.onPause()
+    }
+
+    override fun onDestroy() {
+        // Remove FCM status callbacks
+        try { fcmStatusHandler.removeCallbacks(fcmStatusRunnable) } catch (_: Exception) {}
+        super.onDestroy()
+    }
+
+    private fun hasActiveNetwork(): Boolean {
+        return try {
+            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            val n = cm.activeNetwork ?: return false
+            val caps = cm.getNetworkCapabilities(n) ?: return false
+            // Treat transport presence as connectivity
+            caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) ||
+            caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) ||
+            caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET)
+        } catch (_: Exception) { false }
+    }
+
+    private fun checkFcmStatus() {
+        val deviceOnline = hasActiveNetwork()
+        try {
+            FirebaseMessaging.getInstance().token
+                .addOnCompleteListener { task ->
+                    val tokenOk = task.isSuccessful && !task.result.isNullOrBlank()
+                    val isOnline = deviceOnline && tokenOk
+                    val statusText = if (isOnline) "FCM: Online" else "FCM: Offline"
+                    // Update System Health diagnosticsText line without clobbering other info
+                    try {
+                        val current = diagnosticsText.text?.toString() ?: ""
+                        val lines = current.split('\n')
+                        val rebuilt = StringBuilder()
+                        var injected = false
+                        for (line in lines) {
+                            if (line.trim().startsWith("FCM:")) {
+                                rebuilt.append(statusText).append('\n')
+                                injected = true
+                            } else {
+                                if (line.isNotEmpty()) rebuilt.append(line).append('\n')
+                            }
+                        }
+                        if (!injected) {
+                            if (rebuilt.isNotEmpty() && rebuilt.last() != '\n') rebuilt.append('\n')
+                            rebuilt.append(statusText)
+                        }
+                        diagnosticsText.text = rebuilt.toString().trimEnd()
+                    } catch (_: Exception) {}
+                }
+                .addOnFailureListener {
+                    val statusText = "FCM: Offline"
+                    try {
+                        val current = diagnosticsText.text?.toString() ?: ""
+                        val lines = current.split('\n')
+                        val rebuilt = StringBuilder()
+                        var injected = false
+                        for (line in lines) {
+                            if (line.trim().startsWith("FCM:")) {
+                                rebuilt.append(statusText).append('\n')
+                                injected = true
+                            } else {
+                                if (line.isNotEmpty()) rebuilt.append(line).append('\n')
+                            }
+                        }
+                        if (!injected) {
+                            if (rebuilt.isNotEmpty() && rebuilt.last() != '\n') rebuilt.append('\n')
+                            rebuilt.append(statusText)
+                        }
+                        diagnosticsText.text = rebuilt.toString().trimEnd()
+                    } catch (_: Exception) {}
+                }
+        } catch (_: Exception) {
+            val statusText = "FCM: Offline"
+            try {
+                val current = diagnosticsText.text?.toString() ?: ""
+                val lines = current.split('\n')
+                val rebuilt = StringBuilder()
+                var injected = false
+                for (line in lines) {
+                    if (line.trim().startsWith("FCM:")) {
+                        rebuilt.append(statusText).append('\n')
+                        injected = true
+                    } else {
+                        if (line.isNotEmpty()) rebuilt.append(line).append('\n')
+                    }
+                }
+                if (!injected) {
+                    if (rebuilt.isNotEmpty() && rebuilt.last() != '\n') rebuilt.append('\n')
+                    rebuilt.append(statusText)
+                }
+                diagnosticsText.text = rebuilt.toString().trimEnd()
+            } catch (_: Exception) {}
+        }
     }
 
     private fun setupGraphClickListeners() {
@@ -1195,6 +1249,28 @@ class ScadaActivity : BaseActivity() {
         }
     }
 
+    /**
+     * Unified handler retained for backward references; now delegates to LightsService.
+     */
+    private fun toggleOutsideLights(desiredOn: Boolean) {
+        try {
+            val ok = LightsService().writeOutsideLights(this@ScadaActivity, desiredOn)
+            if (ok) {
+                runOnUiThread {
+                    val msg = if (desiredOn) getString(R.string.bridge_command_on_sent) else getString(R.string.bridge_command_off_sent)
+                    android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_SHORT).show()
+                }
+            } else {
+                runOnUiThread {
+                    android.widget.Toast.makeText(this, getString(R.string.failed_send_bridge_command, "service write failed"), android.widget.Toast.LENGTH_LONG).show()
+                }
+            }
+            try { fetchLightsStatusOnce() } catch (_: Exception) {}
+        } catch (e: Exception) {
+            Log.w("ScadaActivity", "toggleOutsideLights via service failed", e)
+        }
+    }
+
     // ---- Stubs to satisfy references during cleanup. These are small no-ops that log actions.
     private fun setupLightsListener() {
         // Previously this started a realtime listener. For now we perform a single fetch.
@@ -1701,23 +1777,21 @@ class ScadaActivity : BaseActivity() {
         }
     }
 
-    // After views are set up in onCreate or when data refresh completes, update the badge
-    private fun updateScadaStatusBadge(isOnline: Boolean) {
-        val badge: TextView? = findViewById(R.id.scadaStatusBadge)
-        if (badge != null) {
-            if (isOnline) {
-                badge.text = "Online"
-                badge.setBackgroundResource(R.drawable.status_badge_background)
-                badge.setTextColor(ContextCompat.getColor(this, android.R.color.white))
-            } else {
-                badge.text = "Offline"
-                // Use a red background variant if available; fallback by tinting via background swap
-                badge.setBackgroundResource(R.drawable.status_badge_background)
-                badge.background.setTint(ContextCompat.getColor(this, android.R.color.holo_red_light))
-                badge.setTextColor(ContextCompat.getColor(this, android.R.color.white))
-            }
-        }
-    }
+    // Removed: FCM status badge update logic
+    // Previously:
+    //    val badge: TextView? = findViewById(R.id.scadaStatusBadge)
+    //    if (badge != null) {
+    //        if (fcmIsOnline) {
+    //            badge.text = "Online"
+    //            badge.setBackgroundResource(R.drawable.status_badge_background)
+    //            badge.setTextColor(ContextCompat.getColor(this, android.R.color.white))
+    //        } else {
+    //            badge.text = "Offline"
+    //            badge.setBackgroundResource(R.drawable.status_badge_background)
+    //            badge.background.setTint(ContextCompat.getColor(this, android.R.color.holo_red_light))
+    //            badge.setTextColor(ContextCompat.getColor(this, android.R.color.white))
+    //        }
+    //    }
 
     private fun updatePresenceUI(triggeredByUser: Boolean) {
         // Run in background to avoid blocking UI

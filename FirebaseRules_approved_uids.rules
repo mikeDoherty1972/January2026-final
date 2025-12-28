@@ -1,0 +1,33 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper function: approve only listed UIDs
+    function isApprovedUser() {
+      return request.auth != null &&
+             request.auth.uid in [
+               'iIDlWbne1BdR4mAmntbJIkRMr032', // original trusted UID
+               'Kd0W4NrkjiUPmlJ7AiRiURPcLut2'  // current Google Sign-In UID seen in logcat
+               // add more UIDs as needed
+             ];
+    }
+
+    // Bridge command document
+    match /Flights_commands/current_command {
+      allow read: if true;
+      allow write: if isApprovedUser();
+    }
+
+    // Lights controls document
+    match /scada_controls/lights {
+      allow read: if true;
+      allow write: if isApprovedUser();
+    }
+
+    // Read-only for 'security sensors'; deny other writes
+    match /{collectionId}/{docId} {
+      allow read: if collectionId == 'security sensors';
+      allow write: if false;
+    }
+  }
+}

@@ -32,7 +32,14 @@ class MainActivity : BaseActivity() {
     private lateinit var scadaCard: androidx.cardview.widget.CardView
     private lateinit var idsCard: androidx.cardview.widget.CardView
     private lateinit var iperlCard: androidx.cardview.widget.CardView
-    
+
+    // Dashboard lights controller views
+    private var dashboardLightsOnButton: android.widget.Button? = null
+    private var dashboardLightsOffButton: android.widget.Button? = null
+    private var dashboardLightsStatusText: TextView? = null
+    private var dashboardLightsStatusIcon: android.widget.ImageView? = null
+    private var dashboardLightsDetails: TextView? = null
+
     // Firestore listener registrations for proper cleanup
     private var sensorListener: com.google.firebase.firestore.ListenerRegistration? = null
     private var gaugeListener: com.google.firebase.firestore.ListenerRegistration? = null
@@ -57,6 +64,35 @@ class MainActivity : BaseActivity() {
         scadaCard = findViewById(R.id.scadaCard)
         idsCard = findViewById(R.id.idsCard)
         iperlCard = findViewById(R.id.iperlCard)
+
+        // Hook dashboard lights controller
+        dashboardLightsOnButton = findViewById(R.id.dashboardLightsOnButton)
+        dashboardLightsOffButton = findViewById(R.id.dashboardLightsOffButton)
+        dashboardLightsStatusText = findViewById(R.id.dashboardLightsStatusText)
+        dashboardLightsStatusIcon = findViewById(R.id.dashboardLightsStatusIcon)
+        dashboardLightsDetails = findViewById(R.id.dashboardLightsDetails)
+
+        // Write directly via LightsService (no navigation needed)
+        dashboardLightsOnButton?.setOnClickListener {
+            Log.d("MainActivity", "Dashboard Lights ON clicked — using LightsService")
+            val ok = try { LightsService().writeOutsideLights(this@MainActivity, true) } catch (e: Exception) {
+                Log.w("MainActivity", "LightsService ON failed", e); false
+            }
+            try {
+                val msg = if (ok) getString(R.string.bridge_command_on_sent) else getString(R.string.failed_send_bridge_command, "service write failed")
+                ToastHelper.show(this@MainActivity, msg, Toast.LENGTH_SHORT)
+            } catch (_: Exception) {}
+        }
+        dashboardLightsOffButton?.setOnClickListener {
+            Log.d("MainActivity", "Dashboard Lights OFF clicked — using LightsService")
+            val ok = try { LightsService().writeOutsideLights(this@MainActivity, false) } catch (e: Exception) {
+                Log.w("MainActivity", "LightsService OFF failed", e); false
+            }
+            try {
+                val msg = if (ok) getString(R.string.bridge_command_off_sent) else getString(R.string.failed_send_bridge_command, "service write failed")
+                ToastHelper.show(this@MainActivity, msg, Toast.LENGTH_SHORT)
+            } catch (_: Exception) {}
+        }
 
         // Apply per-card colors (reads prefs and falls back to defaults)
         applyCardColors()

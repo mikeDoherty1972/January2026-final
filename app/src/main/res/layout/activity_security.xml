@@ -640,14 +640,28 @@
                 app:cardBackgroundColor="#2C2C2C"
                 app:cardCornerRadius="8dp">
 
-                <TextView
-                    android:id="@+id/recentActivityText"
+                <!-- Replace plain TextView with a NestedScrollView so the history can be scrolled -->
+                <androidx.core.widget.NestedScrollView
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="No recent activity"
-                    android:textSize="14sp"
-                    android:textColor="#888888"
-                    android:padding="16dp" />
+                    android:layout_height="140dp"
+                    android:fillViewport="false"
+                    android:fadeScrollbars="true"
+                    android:scrollbarStyle="insideInset"
+                    android:scrollbars="vertical">
+
+                    <TextView
+                        android:id="@+id/recentActivityText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="No recent activity"
+                        android:textSize="14sp"
+                        android:textColor="#888888"
+                        android:padding="16dp"
+                        android:lineSpacingExtra="2dp"
+                        android:ellipsize="none"
+                        android:overScrollMode="ifContentScrolls" />
+
+                </androidx.core.widget.NestedScrollView>
 
             </androidx.cardview.widget.CardView>
 

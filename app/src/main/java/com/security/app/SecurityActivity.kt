@@ -61,6 +61,32 @@ class SecurityActivity : BaseActivity() {
     // Small in-memory cache to keep recent activity between update cycles
     private val recentActivityCache: MutableList<String> = mutableListOf()
 
+    // Classify whether a log line is security-related. Heuristics based on common zone/door events
+    private fun isSecurityLine(line: String?): Boolean {
+        if (line.isNullOrBlank()) return false
+        val s = line.lowercase(Locale.getDefault())
+        // Explicit tag or common security terms
+        return s.contains("security") ||
+               s.contains("zone") || s.contains("door") || s.contains("garage") || s.contains("front") ||
+               s.contains("back") || s.contains("north") || s.contains("south") || s.contains("alarm") ||
+               s.contains("breach") || s.contains("motion")
+    }
+
+    private fun filteredSecurityActivityAll(): List<String> {
+        return recentActivityCache.filter { isSecurityLine(it) }
+    }
+
+    private fun renderRecentActivityPreview() {
+        val lines = filteredSecurityActivityAll()
+        if (lines.isNotEmpty()) {
+            recentActivityText.text = lines.takeLast(5).reversed().joinToString("\n")
+            try { recentActivityText.setTextColor(resources.getColor(android.R.color.white, theme)) } catch (_: Exception) {}
+        } else {
+            recentActivityText.text = "No recent activity"
+            try { recentActivityText.setTextColor(resources.getColor(android.R.color.darker_gray, theme)) } catch (_: Exception) {}
+        }
+    }
+
     // Firestore listener registration for proper cleanup
     private var securityListener: com.google.firebase.firestore.ListenerRegistration? = null
 
@@ -371,12 +397,55 @@ class SecurityActivity : BaseActivity() {
             recentActivityCache.addAll(items)
             // Show newest activity at the top: take the last 5 (most recent) then reverse so latest is first
             try {
-                recentActivityText.text = recentActivityCache.takeLast(5).reversed().joinToString("\n")
-                recentActivityText.setTextColor(resources.getColor(android.R.color.white, theme))
+                renderRecentActivityPreview()
             } catch (e: Exception) {
                 Log.w("SecurityActivity", "Failed setting recentActivityText from persisted data", e)
             }
             Log.d("SecurityActivity", "Loaded ${recentActivityCache.size} persisted recentActivity entries")
+        }
+
+        // Backfill: merge any FCM alarm history entries received while app was backgrounded
+        try {
+            val alarmPrefs = getSharedPreferences("alarm_history", Context.MODE_PRIVATE)
+            val key = "recent_alarms_json"
+            val json = alarmPrefs.getString(key, "[]") ?: "[]"
+            val arr = try { org.json.JSONArray(json) } catch (_: Exception) { org.json.JSONArray("[]") }
+            if (arr.length() > 0) {
+                val fmt = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
+                val newLines = mutableListOf<String>()
+                var i = 0
+                while (i < arr.length()) {
+                    try {
+                        val obj = arr.getJSONObject(i)
+                        val t = obj.optLong("time_ms", System.currentTimeMillis())
+                        val zone = obj.optString("zone", "Security")
+                        val msg = obj.optString("message", obj.optString("title", "Activity"))
+                        val timeStr = fmt.format(java.util.Date(t))
+                        newLines.add("[$timeStr] $zone: $msg")
+                    } catch (_: Exception) {}
+                    i++
+                }
+                if (newLines.isNotEmpty()) {
+                    // Append and persist, de-duplicating trivial consecutive duplicates
+                    newLines.forEach { line ->
+                        val last = recentActivityCache.lastOrNull()
+                        if (last == null || last != line) recentActivityCache.add(line)
+                    }
+                    // Trim to last 50 entries
+                    if (recentActivityCache.size > 50) {
+                        val removeCount = recentActivityCache.size - 50
+                        repeat(removeCount) { recentActivityCache.removeAt(0) }
+                    }
+                    prefs.edit().putString("security_recent_activity", recentActivityCache.joinToString("\n")).apply()
+                    // Refresh UI
+                    try {
+                        renderRecentActivityPreview()
+                    } catch (_: Exception) {}
+                    Log.d("SecurityActivity", "Backfilled ${newLines.size} FCM alarms into recent activity")
+                }
+            }
+        } catch (e: Exception) {
+            Log.w("SecurityActivity", "Failed to backfill FCM alarm history", e)
         }
 
         // Setup back button
@@ -753,16 +822,13 @@ class SecurityActivity : BaseActivity() {
                 val prefsSave = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
                 prefsSave.edit().putString("security_recent_activity", recentActivityCache.joinToString("\n")).apply()
 
-                // Display the most recent entries first
-                recentActivityText.text = recentActivityCache.takeLast(5).reversed().joinToString("\n")
-                recentActivityText.setTextColor(resources.getColor(android.R.color.white, theme))
+                // Display the most recent entries first (filtered)
+                renderRecentActivityPreview()
             } else {
                 if (recentActivityCache.isNotEmpty()) {
-                    recentActivityText.text = recentActivityCache.takeLast(5).reversed().joinToString("\n")
-                    recentActivityText.setTextColor(resources.getColor(android.R.color.white, theme))
+                    renderRecentActivityPreview()
                 } else {
-                    recentActivityText.text = "No recent activity"
-                    recentActivityText.setTextColor(resources.getColor(android.R.color.darker_gray, theme))
+                    renderRecentActivityPreview()
                 }
             }
 

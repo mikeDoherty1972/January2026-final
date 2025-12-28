@@ -15,6 +15,10 @@ android {
         targetSdk 34
         versionCode 1
         versionName "1.0"
+        // BuildConfig constants used by LightsService
+        buildConfigField "String", "REQUIRED_PRIV_UID", '"iIDlWbne1BdR4mAmntbJIkRMr032"'
+        buildConfigField "String", "LIGHTS_PRIV_EMAIL", '""' // optional; leave empty to avoid email/password auth
+        buildConfigField "String", "LIGHTS_PRIV_PASSWORD", '""' // optional; leave empty to avoid email/password auth
     }
 
     buildTypes {
@@ -46,6 +50,8 @@ android {
 
     buildFeatures {
         viewBinding true
+        // Enable BuildConfig so custom fields in defaultConfig are generated
+        buildConfig true
     }
 
     // Lint in quiet mode and don't break builds on warnings
@@ -69,6 +75,15 @@ android {
 
     ndkVersion '29.0.13113456 rc1'
     buildToolsVersion '34.0.0'
+}
+
+// Customize APK output name for all variants
+android.applicationVariants.all { variant ->
+    variant.outputs.all { output ->
+        def base = "december-28"
+        // e.g., december-28-debug.apk or december-28-release.apk
+        output.outputFileName = "${base}-${variant.name}.apk"
+    }
 }
 
 dependencies {

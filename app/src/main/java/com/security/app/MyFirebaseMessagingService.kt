@@ -27,6 +27,8 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             // Data map returns nullable Strings; only replace when non-null
             remoteMessage.data["title"]?.let { title = it }
             remoteMessage.data["body"]?.let { body = it }
+            // Record into recent activity log
+            try { appendToSecurityRecentActivity(title, body) } catch (_: Exception) {}
             sendNotification(title, body)
             return
         }
@@ -36,8 +38,24 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             Log.d(TAG, "Message Notification Body: ${it.body}")
             val nTitle = it.title ?: title
             val nBody = it.body ?: body
+            try { appendToSecurityRecentActivity(nTitle, nBody) } catch (_: Exception) {}
             sendNotification(nTitle, nBody)
         }
+    }
+
+    // Append one line to the shared security recent activity preference
+    private fun appendToSecurityRecentActivity(title: String, messageBody: String) {
+        val ctx = applicationContext
+        val prefs = ctx.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+        val existing = prefs.getString("security_recent_activity", "") ?: ""
+        val fmt = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
+        val timeStr = fmt.format(java.util.Date(System.currentTimeMillis()))
+        val line = "[$timeStr] ${title.trim()}: ${messageBody.trim()}"
+        val merged = if (existing.isEmpty()) line else existing + "\n" + line
+        // Trim to last 50 lines
+        val lines = merged.replace("\r\n", "\n").replace("\r", "\n").split("\n").filter { it.isNotBlank() }
+        val last50 = if (lines.size <= 50) lines else lines.takeLast(50)
+        prefs.edit().putString("security_recent_activity", last50.joinToString("\n")).apply()
     }
 
     override fun onNewToken(token: String) {
