@@ -454,16 +454,29 @@ def modbus_bridge_loop(db):
                         confirmed = True
                         break
 
-            status_ref.set({
+            # Publish a unified status so the app can rely on a single field
+            status_payload = {
                 "command": cmd,
                 "desired": desired,
                 "command_ts": cmd_ts,
                 "nonce": nonce,
+                # legacy field some clients read
                 "coil_1298_state": confirmed,
+                # add compatibility duplicates so app can read any of these keys
+                "coil_1298": confirmed,
+                "y21_read": confirmed,
+                # unified convenience fields
+                "lights_on": confirmed,
+                "status_text": "ON" if confirmed else "OFF",
                 "attempts": CONFIRM_RETRY_COUNT,
+                "plc_online": True,
+                # provide a stable timestamp key the app expects for details line
+                "updated_at": firestore.SERVER_TIMESTAMP,
                 "timestamp": firestore.SERVER_TIMESTAMP,
+                "last_source": "command_listener",
                 "bridge_version": "unified_v6",
-            }, merge=True)
+            }
+            status_ref.set(status_payload, merge=True)
             log_print("[Modbus] Result:", "CONFIRMED" if confirmed else "NOT CONFIRMED")
         except Exception as e:
             log_print(f"[Modbus] Listener error: {e}")
@@ -482,6 +495,70 @@ def modbus_bridge_loop(db):
     except Exception as e:
         log_print(f"[Modbus] Failed to attach listener: {e}")
 
+# --- NEW: Continuous Y21 (coil 1298) state publisher ---
+
+def y21_monitor_loop(db):
+    """
+    Poll coil 1298 (Y21_read) periodically and publish its raw state to
+    Firestore (scada_controls/lights_status) whenever it changes.
+    This complements the short confirm window in the command listener so
+    OFF transitions after PLC delay timers are still recorded.
+    """
+    status_ref = db.collection("scada_controls").document("lights_status")
+    last_state = None
+    backoff = 1.5  # seconds between polls when healthy
+    while True:
+        try:
+            state, err = modbus_read_coil(doc_to_modbus(COIL_DOC_1298))
+            if err is not None or state is None:
+                # PLC offline or read error; only write if last known was not None
+                if last_state != "PLC_OFFLINE":
+                    try:
+                        status_ref.set({
+                            "plc_online": False,
+                            "y21_error": str(err) if err else "read_error",
+                            # include updated_at for UI timestamp fallback
+                            "updated_at": firestore.SERVER_TIMESTAMP,
+                            "timestamp": firestore.SERVER_TIMESTAMP,
+                            "bridge_version": "unified_v6",
+                        }, merge=True)
+                    except Exception:
+                        pass
+                    last_state = "PLC_OFFLINE"
+                time.sleep(2.0)
+                continue
+
+            # Normalize to bool
+            value = bool(state)
+            if last_state != value:
+                try:
+                    status_ref.set({
+                        # normalized raw coil read
+                        "plc_online": True,
+                        "y21_read": value,
+                        "y21_read_int": 1 if value else 0,
+                        # mirror into legacy/expected fields some clients use
+                        "coil_1298_state": value,
+                        "coil_1298": value,
+                        "lights_on": value,
+                        "status_text": "ON" if value else "OFF",
+                        # meta
+                        "y21_last_change": firestore.SERVER_TIMESTAMP,
+                        # provide common updated_at used by app
+                        "updated_at": firestore.SERVER_TIMESTAMP,
+                        "timestamp": firestore.SERVER_TIMESTAMP,
+                        "last_source": "y21_monitor",
+                        "bridge_version": "unified_v6",
+                    }, merge=True)
+                    log_print(f"[Modbus] Y21_read changed -> {value}")
+                except Exception as e:
+                    log_print(f"[Modbus] Firestore write error (y21): {e}")
+                last_state = value
+            time.sleep(backoff)
+        except Exception as e:
+            log_print(f"[Modbus] y21 monitor error: {e}")
+            time.sleep(2.0)
+
 # ==================== STARTUP ====================
 if __name__ == "__main__":
     os.system("title Unified Bridge V6")
@@ -496,6 +573,9 @@ if __name__ == "__main__":
         t_sec.start()
         t_mod = threading.Thread(target=modbus_bridge_loop, args=(db,), daemon=True, name="ModbusBridge")
         t_mod.start()
+        # NEW: start the continuous Y21 monitor
+        t_y21 = threading.Thread(target=y21_monitor_loop, args=(db,), daemon=True, name="Y21Monitor")
+        t_y21.start()
 
         # Add or update configuration and listener pieces
         try:
@@ -709,6 +789,12 @@ if __name__ == "__main__":
                     status_payload.update({
                         "confirmed": confirmed,
                         "confirm_attempts": attempts,
+                        # publish unified fields for UI
+                        "coil_1298_state": confirmed,
+                        "lights_on": confirmed,
+                        "status_text": "ON" if confirmed else "OFF",
+                        "plc_online": True,
+                        "last_source": "command_listener",
                     })
                     try:
                         status_ref.set(status_payload, merge=True)

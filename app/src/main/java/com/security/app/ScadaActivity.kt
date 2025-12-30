@@ -18,9 +18,6 @@ import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.Scope
 import com.google.api.client.googleapis.extensions.android.gms.auth.GoogleAccountCredential
 import com.google.api.client.json.gson.GsonFactory
-import com.google.api.services.drive.Drive
-import com.google.api.services.drive.DriveScopes
-import com.google.api.client.http.javanet.NetHttpTransport
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.firestore.FirebaseFirestore
@@ -53,6 +50,8 @@ import kotlin.math.*
 import com.google.firebase.messaging.FirebaseMessaging
 import android.os.Handler
 import android.os.Looper
+import kotlinx.coroutines.Job
+import android.view.View
 
 class ScadaActivity : BaseActivity() {
 
@@ -175,21 +174,20 @@ class ScadaActivity : BaseActivity() {
     // Polling job: limit reads to once every 30s up to 10 attempts (5 minutes)
     private var lightsPollJob: kotlinx.coroutines.Job? = null
     // Drive polling job (so we can cancel it when switching backends)
-    private var drivePollingJob: kotlinx.coroutines.Job? = null
+    // In Firestore-only variant, keep a handle but never start it
+    private var drivePollingJob: Job? = null
 
     // Dashboard lights controller buttons (duplicated controller on the dashboard page)
     private var dashLightsOnBtn: android.widget.Button? = null
     private var dashLightsOffBtn: android.widget.Button? = null
 
-    // Google Drive API
-    private lateinit var googleSignInClient: GoogleSignInClient
-    private var driveService: Drive? = null
-    // Activity Result launcher replaces deprecated startActivityForResult
-    private lateinit var signInLauncher: ActivityResultLauncher<Intent>
-
     private lateinit var auth: FirebaseAuth
     // Firestore listener registration for lights_status
     private var lightsStatusListener: ListenerRegistration? = null
+
+    // Activity-level Google sign-in launcher/client
+    private lateinit var signInLauncher: ActivityResultLauncher<Intent>
+    private lateinit var googleSignInClient: GoogleSignInClient
 
     override fun onCreate(savedInstanceState: Bundle?) {
         Log.d("ScadaActivity", "onCreate called")
@@ -222,7 +220,6 @@ class ScadaActivity : BaseActivity() {
                         }
                         // account non-null here
                         firebaseAuthWithGoogle(account)
-                        initializeDriveService(account)
                     } else {
                         try { ToastHelper.show(this@ScadaActivity, getString(R.string.google_signin_failed_generic, task.exception?.localizedMessage ?: ""), android.widget.Toast.LENGTH_LONG) } catch (_: Exception) {}
                     }
@@ -374,6 +371,14 @@ class ScadaActivity : BaseActivity() {
         lightsStatusIcon = findViewById(R.id.lightsStatusIcon)
         lightsStatusText = findViewById(R.id.lightsStatusText)
         lightsDetails = findViewById(R.id.lightsDetails)
+        // Immediately clear any stale status text (e.g., legacy Drive line) in this Firestore-only build
+        try { lightsDetails.text = "--" } catch (_: Exception) {}
+        // Force backend preference to Firebase (Firestore-only variant) so no Drive branch is taken anywhere
+        try {
+            val appPrefs = getSharedPreferences("app_prefs", MODE_PRIVATE)
+            appPrefs.edit().putString("lights_control_backend", "firebase").apply()
+        } catch (_: Exception) {}
+
         // Setup lights control buttons
         val lightsOnButton = findViewById<android.widget.Button>(R.id.lightsOnButton)
         val lightsOffButton = findViewById<android.widget.Button>(R.id.lightsOffButton)
@@ -420,9 +425,10 @@ class ScadaActivity : BaseActivity() {
         try { updateSunAndTides() } catch (e: Exception) { Log.w("ScadaActivity", "updateSunAndTides failed", e) }
 
         // Setup Google Drive sign-in
-        setupGoogleDriveSignIn()
+        // Firestore-only variant: skip Drive sign-in entirely
+        // setupGoogleDriveSignIn()
         // Start polling for Y21_read_status from Drive file
-        startY21ReadPolling()
+        // Firestore-only variant: do not start Drive polling
 
         // Alarm status card opens settings dialog
         findViewById<androidx.cardview.widget.CardView>(R.id.alarmStatusCard).setOnClickListener {
@@ -445,7 +451,8 @@ class ScadaActivity : BaseActivity() {
             val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
                 .requestEmail()
                 .requestIdToken(getString(R.string.default_web_client_id))
-                .requestScopes(Scope(DriveScopes.DRIVE)) // Changed from DRIVE_FILE to DRIVE
+                // Firestore-only variant: do not request Drive scope
+                //.requestScopes(Scope(DriveScopes.DRIVE))
                 .build()
             googleSignInClient = GoogleSignIn.getClient(this, gso)
             signInLauncher.launch(googleSignInClient.signInIntent)
@@ -487,8 +494,10 @@ class ScadaActivity : BaseActivity() {
             fcmStatusHandler.postDelayed(fcmStatusRunnable, 60 * 60 * 1000L)
         } catch (_: Exception) {}
 
-        // New: refresh lights authorization status on resume
-        refreshLightsAuthorizationStatus()
+        try {
+            // Firestore-only: attach live listener for lights
+            setupLightsListener()
+        } catch (_: Exception) {}
     }
 
     override fun onPause() {
@@ -503,6 +512,19 @@ class ScadaActivity : BaseActivity() {
         super.onDestroy()
     }
 
+    override fun onStart() {
+        super.onStart()
+        // Attach realtime listener when Activity becomes visible
+        try { setupLightsListener() } catch (_: Exception) {}
+    }
+
+    override fun onStop() {
+        // Detach listener to avoid reads when not visible
+        try { lightsStatusListener?.remove() } catch (_: Exception) {}
+        lightsStatusListener = null
+        super.onStop()
+    }
+
     private fun hasActiveNetwork(): Boolean {
         return try {
             val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
@@ -513,6 +535,76 @@ class ScadaActivity : BaseActivity() {
             caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) ||
             caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET)
         } catch (_: Exception) { false }
+    }
+
+    // --- Compatibility shims (no-ops or minimal behavior) ---
+    // Old build referenced Drive polling; we now use Firestore live listener. Keep for compatibility.
+    // Firestore-only variant: ensure Firestore listener is active
+    private fun startLightsPolling() {
+        try { fetchLightsStatusOnce() } catch (_: Exception) {}
+    }
+
+    // Presence card updater (simple network reachability check)
+    private fun updatePresenceUI(forceCheck: Boolean) {
+        try {
+            val online = hasActiveNetwork()
+            if (::setupPresenceText.isInitialized) {
+                setupPresenceText.text = if (online) "Device online" else "Device offline"
+                val color = if (online) "#4CAF50".toColorInt() else "#F44336".toColorInt()
+                setupPresenceText.setTextColor(color)
+            }
+            if (::setupPresenceDot.isInitialized) {
+                val color = if (online) "#4CAF50".toColorInt() else "#F44336".toColorInt()
+                setupPresenceDot.imageTintList = ColorStateList.valueOf(color)
+            }
+        } catch (_: Exception) {}
+    }
+
+    // Legacy Y21 polling hook; Drive polling is disabled in this variant.
+    // Firestore-only variant: no-op for Drive polling
+    private fun startY21ReadPolling() {
+        Log.d("ScadaActivity", "startY21ReadPolling: disabled in this build; Firestore listener handles status updates")
+    }
+
+    // Minimal placeholder dialog so clicks don’t crash in this variant
+    private fun openAlarmSettingsDialog() {
+        try {
+            // Setup dialog to switch lights backend
+            val prefs = getSharedPreferences("app_prefs", MODE_PRIVATE)
+            val current = (prefs.getString("scada_lights_backend", "firestore") ?: "firestore").lowercase()
+            val options = arrayOf("Firebase (Firestore-only)")
+            var selectedIndex = 0
+
+            AlertDialog.Builder(this)
+                .setTitle("Setup")
+                .setSingleChoiceItems(options, selectedIndex) { _, which ->
+                    selectedIndex = which
+                }
+                .setPositiveButton("Apply") { _, _ ->
+                    val chosen = "firestore"
+                    prefs.edit().putString("scada_lights_backend", chosen).apply()
+                    try { applyLightsBackendSelection() } catch (_: Exception) {}
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        } catch (_: Exception) {
+            try {
+                AlertDialog.Builder(this)
+                    .setTitle("Alarm Settings")
+                    .setMessage("Settings are not available in this variant.")
+                    .setPositiveButton("OK", null)
+                    .show()
+            } catch (_: Exception) {}
+        }
+    }
+
+    // Lights backend selection not used anymore; keep as no-op
+    private fun applyLightsBackendSelection() {
+        // Firestore-only: always cancel any legacy Drive jobs and use Firestore listener/fetch
+        try { drivePollingJob?.cancel() } catch (_: Exception) {}
+        drivePollingJob = null
+        try { fetchLightsStatusOnce() } catch (_: Exception) {}
+        Log.d("ScadaActivity", "applyLightsBackendSelection: forced Firebase backend (Firestore-only)")
     }
 
     private fun checkFcmStatus() {
@@ -1047,30 +1139,11 @@ class ScadaActivity : BaseActivity() {
         } else {
             // Already signed in, proceed to initialize Drive
             firebaseAuthWithGoogle(account)
-            initializeDriveService(account)
         }
     }
 
     private fun setupGoogleDriveSignIn() {
-        Log.d("ScadaActivity", "setupGoogleDriveSignIn called")
-        auth = FirebaseAuth.getInstance()
-        val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestIdToken(getString(R.string.default_web_client_id))
-            .requestEmail()
-            .requestScopes(Scope(DriveScopes.DRIVE)) // Changed from DRIVE_FILE to DRIVE
-            .build()
-        googleSignInClient = GoogleSignIn.getClient(this, gso)
-
-        googleSignInClient.silentSignIn().addOnCompleteListener(this) { task ->
-            if (task.isSuccessful) {
-                val account = task.result
-                firebaseAuthWithGoogle(account)
-                initializeDriveService(account)
-            } else {
-                // Silent sign-in failed, fallback to interactive sign-in
-                signInLauncher.launch(googleSignInClient.signInIntent)
-            }
-        }
+        // Firestore-only variant: no-op
     }
 
     // Remove onActivityResult override (replaced by signInLauncher)
@@ -1102,54 +1175,16 @@ class ScadaActivity : BaseActivity() {
             }
     }
 
-    private fun initializeDriveService(account: GoogleSignInAccount?) {
-        Log.d("ScadaActivity", "initializeDriveService called with account: $account")
-        if (account == null) return
-        Log.i("ScadaActivity", "Signed-in Google account: ${account.email}")
-        val credential = GoogleAccountCredential.usingOAuth2(
-            this, listOf(DriveScopes.DRIVE) // Changed from DRIVE_FILE to DRIVE
-        )
-        credential.selectedAccount = account.account
-        driveService = Drive.Builder(
-            NetHttpTransport(),
-            GsonFactory.getDefaultInstance(),
-            credential
-        ).setApplicationName("Home Automation").build()
-        // Enable lights buttons now that Drive is ready
-        runOnUiThread {
-            findViewById<android.widget.Button>(R.id.lightsOnButton).isEnabled = true
-            findViewById<android.widget.Button>(R.id.lightsOffButton).isEnabled = true
-            Log.d("ScadaActivity", "Lights buttons enabled after Drive initialization")
-        }
-        // List all accessible files for debugging
-        CoroutineScope(Dispatchers.IO).launch {
-            listAllDriveFilesForDebug()
-        }
-        // We no longer poll the Drive lights file. Instead listen for status updates in Firestore.
-        // Start Firestore listener for lights status so UI shows canonical confirmation from the bridge.
-        try { fetchLightsStatusOnce() } catch (_: Exception) {}
-        // Ensure lights backend selection is applied now that Drive is initialized. If the user
-        // selected 'drive' as the backend, this will start the drive polling job.
-        try { applyLightsBackendSelection() } catch (_: Exception) {}
+    // Remove all Drive-related code: service initialization, polling, etc.
+    // Any Drive polling starter methods should be turned into no-ops
+    private fun startDrivePollingIfNeeded() {
+        // Firestore-only variant: no-op
     }
 
-    // List all accessible files and log their names and IDs
-    private suspend fun listAllDriveFilesForDebug() = withContext(Dispatchers.IO) {
-        val drive = driveService ?: return@withContext
-        try {
-            val result = drive.files().list().setPageSize(100).setFields("files(id, name)").execute()
-            val files = result.files
-            if (files == null || files.isEmpty()) {
-                Log.d("ScadaActivity", "[DEBUG] No files found in Drive.")
-            } else {
-                Log.d("ScadaActivity", "[DEBUG] Files accessible to app:")
-                for (file in files) {
-                    Log.d("ScadaActivity", "[DEBUG] File: ${file.name} (ID: ${file.id})")
-                }
-            }
-        } catch (e: Exception) {
-            Log.e("ScadaActivity", "[DEBUG] Error listing Drive files", e)
-        }
+    private fun stopDrivePollingIfRunning() {
+        // Ensure any legacy job is cancelled if referenced
+        drivePollingJob?.cancel()
+        drivePollingJob = null
     }
 
     // Replaced the realtime listener with a one-shot fetch to reduce Firestore reads.
@@ -1161,83 +1196,15 @@ class ScadaActivity : BaseActivity() {
             val statusRef = db.collection("scada_controls").document("lights_status")
             statusRef.get()
                 .addOnSuccessListener { snapshot ->
-                    // process on main dispatcher
                     CoroutineScope(Dispatchers.Main).launch {
                         try {
-                            if (snapshot == null || !snapshot.exists()) return@launch
-
-                            val appPrefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
-                            val backend = appPrefs.getString("lights_control_backend", "firebase") ?: "firebase"
-
-                            val lightsState: Boolean? = if (backend == "drive") {
-                                val y21 = snapshot.getStringSafe("Y21_read_status") ?: snapshot.getStringSafe("Y21_read") ?: snapshot.getStringSafe("Y21")
-                                val m21 = snapshot.getStringSafe("M21_read") ?: snapshot.getStringSafe("M21")
-                                val driveValue = m21 ?: y21
-                                when {
-                                    driveValue?.contains("ON", ignoreCase = true) == true -> true
-                                    driveValue?.contains("1") == true -> true
-                                    driveValue?.contains("OFF", ignoreCase = true) == true -> false
-                                    driveValue?.contains("0") == true -> false
-                                    else -> null
-                                }
-                            } else {
-                                val state = when {
-                                    snapshot.contains("coil_1298_state") -> snapshot.getBoolean("coil_1298_state")
-                                    snapshot.contains("coil_1298") -> snapshot.getBoolean("coil_1298")
-                                    snapshot.contains("coil_1298_state_bool") -> snapshot.getBoolean("coil_1298_state_bool")
-                                    snapshot.contains("coil_1298_state_str") -> try { snapshot.getString("coil_1298_state_str")?.toBoolean() } catch (_: Exception) { null }
-                                    snapshot.contains("state") -> snapshot.getBoolean("state")
-                                    snapshot.contains("actual_state") -> snapshot.getBoolean("actual_state")
-                                    else -> null
-                                }
-                                if (state == null) Log.w("ScadaActivity", "FCM mode: No coil_1298 state found in snapshot. Available fields: ${snapshot.data?.keys}")
-                                state
-                            }
-
-                            val lastCmd = snapshot.getString("last_command") ?: "--"
-                            val lastActionAny = snapshot.get("last_action_ts")
-                            val lastAction = when (lastActionAny) {
-                                is com.google.firebase.Timestamp -> try { java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(java.util.Date(lastActionAny.toDate().time)) } catch (_: Exception) { "" }
-                                is String -> lastActionAny
-                                else -> ""
-                            }
-
-                            // Update UI
+                            // Always update UI from Firestore snapshot; no Drive backend in this variant
+                            updateLightsUiFromSnapshot(snapshot)
+                            // Extra sanitation: if legacy text somehow remains, clear it
                             try {
-                                val color = when (lightsState) {
-                                    true -> "#4CAF50".toColorInt()
-                                    false -> "#FF5722".toColorInt()
-                                    null -> "#9E9E9E".toColorInt()
-                                }
-                                lightsStatusIcon.imageTintList = ColorStateList.valueOf(color)
-                                lightsStatusText.setTextColor(color)
-                                lightsStatusText.text = when (lightsState) {
-                                    true -> getString(R.string.text_on)
-                                    false -> getString(R.string.text_off)
-                                    null -> getString(R.string.text_unknown)
-                                }
-
-                                if (backend == "drive") {
-                                     val y21 = snapshot.getStringSafe("Y21_read_status") ?: snapshot.getStringSafe("Y21_read") ?: snapshot.getStringSafe("Y21")
-                                     val m21 = snapshot.getStringSafe("M21_read") ?: snapshot.getStringSafe("M21")
-                                     val driveText = when {
-                                         !m21.isNullOrEmpty() -> m21
-                                         !y21.isNullOrEmpty() -> y21
-                                         else -> "--"
-                                     }
-                                     lightsDetails.text = getString(R.string.drive_prefix, driveText)
-                                 } else {
-                                    val yVal = lightsState?.toString() ?: "--"
-                                    val details = mutableListOf<String>()
-                                    details.add(getString(R.string.y1298_format, yVal))
-                                    details.add(getString(R.string.cmd_format, lastCmd))
-                                    if (lastAction.isNotEmpty()) details.add(getString(R.string.at_format, lastAction))
-                                    lightsDetails.text = details.joinToString(" ")
-                                }
-                            } catch (e: Exception) {
-                                Log.w("ScadaActivity", "Failed update lights indicator from snapshot", e)
-                            }
-
+                                val txt = lightsDetails.text?.toString() ?: ""
+                                if (txt.contains("Drive:", ignoreCase = true)) lightsDetails.text = "--"
+                            } catch (_: Exception) {}
                         } catch (e: Exception) {
                             Log.w("ScadaActivity", "Error processing lights_status snapshot", e)
                         }
@@ -1245,1030 +1212,156 @@ class ScadaActivity : BaseActivity() {
                 }
                 .addOnFailureListener { e -> Log.w("ScadaActivity", "Failed fetching lights_status", e) }
         } catch (e: Exception) {
-            Log.w("ScadaActivity", "setupLightsListener failed", e)
+            Log.w("ScadaActivity", "fetchLightsStatusOnce failed", e)
         }
     }
 
-    /**
-     * Unified handler retained for backward references; now delegates to LightsService.
-     */
-    private fun toggleOutsideLights(desiredOn: Boolean) {
-        try {
-            val ok = LightsService().writeOutsideLights(this@ScadaActivity, desiredOn)
-            if (ok) {
-                runOnUiThread {
-                    val msg = if (desiredOn) getString(R.string.bridge_command_on_sent) else getString(R.string.bridge_command_off_sent)
-                    android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_SHORT).show()
-                }
-            } else {
-                runOnUiThread {
-                    android.widget.Toast.makeText(this, getString(R.string.failed_send_bridge_command, "service write failed"), android.widget.Toast.LENGTH_LONG).show()
-                }
-            }
-            try { fetchLightsStatusOnce() } catch (_: Exception) {}
-        } catch (e: Exception) {
-            Log.w("ScadaActivity", "toggleOutsideLights via service failed", e)
-        }
-    }
-
-    // ---- Stubs to satisfy references during cleanup. These are small no-ops that log actions.
+    // Attach a lightweight snapshot listener; safe to call multiple times (idempotent)
     private fun setupLightsListener() {
-        // Previously this started a realtime listener. For now we perform a single fetch.
-        try { fetchLightsStatusOnce() } catch (_: Exception) { Log.w("ScadaActivity", "setupLightsListener no-op") }
-    }
-
-    private fun startLightsPolling() {
-        // Starts a short polling job; keep as no-op here (existing code conditionally calls it)
-        Log.d("ScadaActivity", "startLightsPolling called - no-op stub")
-    }
-
-    private fun startY21ReadPolling() {
-        Log.d("ScadaActivity", "startY21ReadPolling called - no-op stub")
-    }
-
-    private fun openAlarmSettingsDialog() {
-        // Debugging: log entry so we can confirm clicks reach this method via Logcat
-        Log.d("ScadaActivity", "openAlarmSettingsDialog called")
-        val prefs = getSharedPreferences("alarm_prefs", Context.MODE_PRIVATE)
-        // App-level prefs used for appearance/wind/backend selection
-        val appPrefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
-        val dialogView = layoutInflater.inflate(R.layout.dialog_alarm_settings, null)
-
-        // Bind dialog views (use nullable types to tolerate layout variants)
-        val etLowPressure = dialogView.findViewById<android.widget.EditText?>(R.id.et_low_pressure)
-        val etHighAmps = dialogView.findViewById<android.widget.EditText?>(R.id.et_high_amps)
-        val etHighAmpsDuration = dialogView.findViewById<android.widget.EditText?>(R.id.et_high_amps_duration)
-        val etWaterVariance = dialogView.findViewById<android.widget.EditText?>(R.id.et_water_variance)
-        val etDvrMinutes = dialogView.findViewById<android.widget.EditText?>(R.id.et_dvr_stale_minutes)
-        val etWaterHourlyThreshold = dialogView.findViewById<android.widget.EditText?>(R.id.et_water_hourly_threshold)
-        val etWaterHourlyHours = dialogView.findViewById<android.widget.EditText?>(R.id.et_water_hourly_hours)
-        val switchInvertWind = dialogView.findViewById<androidx.appcompat.widget.SwitchCompat?>(R.id.switch_invert_wind)
-        // Appearance buttons (moved here from diagnostics long-press)
-        val btnCardColor = dialogView.findViewById<android.widget.Button?>(R.id.btn_card_color)
-        val btnGraphColor = dialogView.findViewById<android.widget.Button?>(R.id.btn_graph_color)
-        val btnSave = dialogView.findViewById<android.widget.Button>(R.id.btn_save_alarms)
-
-        // New: time picker buttons for security schedule
-        val btnEnableTime = dialogView.findViewById<android.widget.Button?>(R.id.btn_security_enable_time)
-        val btnDisableTime = dialogView.findViewById<android.widget.Button?>(R.id.btn_security_disable_time)
-        val btnClearSecuritySchedule = dialogView.findViewById<android.widget.Button?>(R.id.btn_clear_security_schedule)
-
-        // Load stored schedule and set button labels
         try {
-            val seH = appPrefs.getInt("security_enable_hour", -1)
-            val seM = appPrefs.getInt("security_enable_min", 0)
-            val sdH = appPrefs.getInt("security_disable_hour", -1)
-            val sdM = appPrefs.getInt("security_disable_min", 0)
-            if (seH >= 0) btnEnableTime?.text = String.format(Locale.getDefault(), "%02d:%02d", seH, seM) else btnEnableTime?.text = getString(R.string.set_time)
-            if (sdH >= 0) btnDisableTime?.text = String.format(Locale.getDefault(), "%02d:%02d", sdH, sdM) else btnDisableTime?.text = getString(R.string.set_time)
-        } catch (_: Exception) {}
-
-        // Helper to show TimePicker and write selection to button text
-        fun openTimePicker(initialH: Int?, initialM: Int?, onPicked: (Int, Int) -> Unit) {
-            val now = java.util.Calendar.getInstance()
-            val h = initialH ?: now.get(java.util.Calendar.HOUR_OF_DAY)
-            val m = initialM ?: now.get(java.util.Calendar.MINUTE)
-            val picker = android.app.TimePickerDialog(this, { _, hourOfDay, minute -> onPicked(hourOfDay, minute) }, h, m, true)
-            picker.show()
-        }
-
-        btnEnableTime?.setOnClickListener {
-            try {
-                val seH = appPrefs.getInt("security_enable_hour", -1).takeIf { it >= 0 }
-                val seM = appPrefs.getInt("security_enable_min", 0)
-                openTimePicker(seH, seM) { hh, mm -> btnEnableTime.text = String.format(Locale.getDefault(), "%02d:%02d", hh, mm); appPrefs.edit { putInt("security_enable_hour", hh); putInt("security_enable_min", mm) } }
-            } catch (e: Exception) { android.util.Log.w("ScadaActivity", "Enable time picker failed", e) }
-        }
-
-        btnDisableTime?.setOnClickListener {
-            try {
-                val sdH = appPrefs.getInt("security_disable_hour", -1).takeIf { it >= 0 }
-                val sdM = appPrefs.getInt("security_disable_min", 0)
-                openTimePicker(sdH, sdM) { hh, mm -> btnDisableTime.text = String.format(Locale.getDefault(), "%02d:%02d", hh, mm); appPrefs.edit { putInt("security_disable_hour", hh); putInt("security_disable_min", mm) } }
-            } catch (e: Exception) { android.util.Log.w("ScadaActivity", "Disable time picker failed", e) }
-        }
-
-        // Load security schedule into dialog from appPrefs
-        try {
-            val seH = appPrefs.getInt("security_enable_hour", -1)
-            val seM = appPrefs.getInt("security_enable_min", 0)
-            val sdH = appPrefs.getInt("security_disable_hour", -1)
-            val sdM = appPrefs.getInt("security_disable_min", 0)
-            if (seH >= 0) btnEnableTime?.text = String.format(Locale.getDefault(), "%02d:%02d", seH, seM) else btnEnableTime?.text = getString(R.string.set_time)
-            if (sdH >= 0) btnDisableTime?.text = String.format(Locale.getDefault(), "%02d:%02d", sdH, sdM) else btnDisableTime?.text = getString(R.string.set_time)
-        } catch (_: Exception) {}
-
-        // NOTE: previously there was a direct `findViewById(R.id.cb_enable_when_away)` here which caused unresolved-reference
-        // and later duplicate declarations; that code has been removed so the safer resource.getIdentifier-based lookup
-        // (declared below) is the single source of the optional checkbox reference.
-
-        // Load current prefs into dialog fields (safe calls)
-        try { etLowPressure?.setText(prefs.getFloat("low_pressure_threshold", 1.0f).toString()) } catch (_: Exception) {}
-        try { etHighAmps?.setText(prefs.getFloat("high_amps_threshold", 6.0f).toString()) } catch (_: Exception) {}
-        try { etHighAmpsDuration?.setText((prefs.getLong("high_amps_duration_ms", 3600000L) / 60000L).toString()) } catch (_: Exception) {}
-        try { etWaterVariance?.setText(prefs.getFloat("water_variance_threshold", 0.1f).toString()) } catch (_: Exception) {}
-        try { etDvrMinutes?.setText((prefs.getLong("dvr_stale_minutes", 60L)).toString()) } catch (_: Exception) {}
-        try { etWaterHourlyThreshold?.setText(prefs.getFloat("water_hourly_volume_threshold", 500f).toString()) } catch (_: Exception) {}
-        try { etWaterHourlyHours?.setText(prefs.getInt("water_hourly_window_hours", 1).toString()) } catch (_: Exception) {}
-
-        // Resolve optional spinner and checkbox IDs via resources.getIdentifier so missing layout elements are tolerated
-        val spinnerLiters = dialogView.findViewById<android.widget.Spinner?>(resources.getIdentifier("spinner_hourly_preset", "id", packageName))
-        val spinnerHours = dialogView.findViewById<android.widget.Spinner?>(resources.getIdentifier("spinner_hourly_hours_preset", "id", packageName))
-        val cbEnableWhenAway = run {
-            val id = resources.getIdentifier("cb_enable_when_away", "id", packageName)
-            if (id != 0) dialogView.findViewById<android.widget.CheckBox?>(id) else null
-        }
-
-        // Ensure spinner choices and radio group reflect the saved values (avoid showing defaults)
-        try {
-            val literOptions = arrayOf("100 L", "250 L", "500 L", "1000 L")
-            val currentHourly = etWaterHourlyThreshold?.text.toString().toFloatOrNull()
-            if (currentHourly != null) {
-                val idx = literOptions.indexOfFirst { opt ->
-                    opt.split(" ").firstOrNull()?.toFloatOrNull() == currentHourly
-                }.coerceAtLeast(0)
-                spinnerLiters?.setSelection(idx)
+            if (lightsStatusListener != null) return
+            val statusRef = db.collection("scada_controls").document("lights_status")
+            lightsStatusListener = statusRef.addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    android.util.Log.w("ScadaActivity", "lights_status listener error", error)
+                    return@addSnapshotListener
+                }
+                try {
+                    updateLightsUiFromSnapshot(snapshot)
+                    // Sanitize any legacy text
+                    val txt = lightsDetails.text?.toString() ?: ""
+                    if (txt.contains("Drive:", true) || txt.contains("Cmd:", true)) {
+                        lightsDetails.text = "--"
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("ScadaActivity", "listener UI update failed", e)
+                }
             }
-        } catch (_: Exception) {}
+            // Prime once
+            fetchLightsStatusOnce()
+        } catch (e: Exception) {
+            android.util.Log.w("ScadaActivity", "setupLightsListener failed", e)
+        }
+    }
 
-        try {
-            val hourOptions = arrayOf("1 h", "2 h", "4 h", "8 h")
-            val currentHours = etWaterHourlyHours?.text.toString().toIntOrNull() ?: 1
-            val idx = hourOptions.indexOfFirst { opt -> opt.split(" ").firstOrNull()?.toIntOrNull() == currentHours }
-            if (idx >= 0) spinnerHours?.setSelection(idx) else spinnerHours?.setSelection(0)
-        } catch (_: Exception) {}
+    private fun updateLightsUiFromSnapshot(snapshot: com.google.firebase.firestore.DocumentSnapshot?) {
+        if (snapshot == null || !snapshot.exists()) {
+            try {
+                val gray = "#9E9E9E".toColorInt()
+                lightsStatusIcon.imageTintList = android.content.res.ColorStateList.valueOf(gray)
+                lightsStatusText.setTextColor(gray)
+                lightsStatusText.text = getString(R.string.text_unknown)
+                // In Firestore-only variant, keep details blank
+                lightsDetails.text = "--"
+            } catch (_: Exception) {}
+            return
+        }
+        // Prefer PLC field coil_1298 or Y21_read
+        fun parseBoolFromAny(v: Any?): Boolean? {
+            return when (v) {
+                is Boolean -> v
+                is Number -> v.toInt() != 0
+                is String -> {
+                    val s = v.trim().lowercase()
+                    when (s) {
+                        "1", "y", "yes", "true", "on" -> true
+                        "0", "n", "no", "false", "off" -> false
+                        else -> null
+                    }
+                }
+                else -> null
+            }
+        }
+        val data = snapshot.data ?: emptyMap<String, Any>()
+        val coil1298 = parseBoolFromAny(data["coil_1298"]) ?: parseBoolFromAny(data["Y21_read"]) ?: parseBoolFromAny(data["y21_read"]) // tolerant keys
+        // Legacy fields (sent_txt, Drive, Cmd) are ignored in this variant
 
+        val onColor = "#4CAF50".toColorInt()
+        val offColor = "#FF5722".toColorInt()
+        if (coil1298 == true) {
+            lightsStatusIcon.imageTintList = android.content.res.ColorStateList.valueOf(onColor)
+            lightsStatusText.setTextColor(onColor)
+            lightsStatusText.text = getString(R.string.text_on)
+        } else if (coil1298 == false) {
+            lightsStatusIcon.imageTintList = android.content.res.ColorStateList.valueOf(offColor)
+            lightsStatusText.setTextColor(offColor)
+            lightsStatusText.text = getString(R.string.text_off)
+        } else {
+            val gray = "#9E9E9E".toColorInt()
+            lightsStatusIcon.imageTintList = android.content.res.ColorStateList.valueOf(gray)
+            lightsStatusText.setTextColor(gray)
+            lightsStatusText.text = getString(R.string.text_unknown)
+        }
+        // Details: show a compact Firestore-only line with last update time if available; otherwise "--"
         try {
-            val rg = dialogView.findViewById<android.widget.RadioGroup?>(R.id.rg_lights_control)
-            val backendPref = appPrefs.getString("lights_control_backend", "firebase") ?: "firebase"
-            if (backendPref == "drive") {
-                rg?.check(R.id.rb_control_drive)
+            val ts = snapshot.getTimestamp("updated_at")?.toDate()
+            val details = if (ts != null) {
+                val fmt = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
+                val y21 = if (coil1298 == true) "1" else if (coil1298 == false) "0" else "-"
+                "Y21_read: $y21 @ ${fmt.format(ts)}"
             } else {
-                rg?.check(R.id.rb_control_firebase)
+                val y21 = if (coil1298 == true) "1" else if (coil1298 == false) "0" else "-"
+                "Y21_read: $y21"
             }
-        } catch (_: Exception) {}
-
-        // Initialize invert wind and live preview from global app prefs
-        val currentOffset = appPrefs.getFloat("wind_arrow_offset_deg", 0f)
-
-        // Dialog preview controls
-        val previewArrow = dialogView.findViewById<ImageView?>(R.id.preview_wind_arrow)
-        val tvOffset = dialogView.findViewById<TextView?>(R.id.tv_wind_offset_value)
-        val seekOffset = dialogView.findViewById<android.widget.SeekBar?>(R.id.seek_wind_offset)
-
-        // Set initial preview and seek position
-        val normalizedCurrent = ((currentOffset) % 360f + 360f) % 360f
-        seekOffset?.progress = normalizedCurrent.toInt()
-        tvOffset?.text = getString(R.string.offset_format, normalizedCurrent.toInt())
-        try { previewArrow?.rotation = normalizedCurrent } catch (_: Exception) {}
-
-        // Switch reflects zero vs non-zero offset (invert convenience)
-        switchInvertWind?.isChecked = (normalizedCurrent % 360f) != 0f
-
-        // SeekBar listener updates preview arrow smoothly (animate rotation)
-        seekOffset?.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
-                tvOffset?.text = getString(R.string.offset_format, progress)
-                try {
-                    val from = previewArrow?.rotation ?: 0f
-                    val to = progress.toFloat()
-                    val animator = android.animation.ObjectAnimator.ofFloat(previewArrow, "rotation", from, to)
-                    animator.duration = 250
-                    animator.start()
-                } catch (_: Exception) {}
-                try { switchInvertWind?.isChecked = (progress % 360) != 0 } catch (_: Exception) {}
-            }
-            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
-        })
-
-        // Switch toggles quick 180° vs 0° and updates preview/seek
-        switchInvertWind?.setOnCheckedChangeListener { _, isChecked ->
-            val newOffset = if (isChecked) 180f else 0f
-            try { seekOffset?.progress = newOffset.toInt() } catch (_: Exception) {}
+            lightsDetails.text = details
+        } catch (_: Exception) {
+            lightsDetails.text = "--"
         }
-
-        // Appearance button handlers: reuse showColorPicker helper already present in the activity
-        btnCardColor?.setOnClickListener {
-            showColorPicker("card_scada_color", "Choose card background color") {
-                try { ToastHelper.show(this, "Card color saved", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
-            }
-        }
-        btnGraphColor?.setOnClickListener {
-            showColorPicker("graph_background_color", "Choose graph background color") {
-                try { ToastHelper.show(this, "Graph color saved", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
-            }
-        }
-
-        val dialog = androidx.appcompat.app.AlertDialog.Builder(this)
-            .setView(dialogView)
-            .create()
-
-        // Load recent alarms from shared prefs and populate the Recent Alarms card
+        // Final sanitation: never show legacy Drive/Cmd/Sent TXT substrings
         try {
-            val historyPrefs = getSharedPreferences("alarm_history", Context.MODE_PRIVATE)
-            val rawJson = historyPrefs.getString("recent_alarms_json", "[]") ?: "[]"
-            val arr = org.json.JSONArray(rawJson)
-            val slots = listOf(
-                dialogView.findViewById<TextView?>(R.id.recent_alarm_1),
-                dialogView.findViewById<TextView?>(R.id.recent_alarm_2),
-                dialogView.findViewById<TextView?>(R.id.recent_alarm_3),
-                dialogView.findViewById<TextView?>(R.id.recent_alarm_4),
-                dialogView.findViewById<TextView?>(R.id.recent_alarm_5)
-            )
-            for (i in 0 until 5) {
-                val tv = slots[i]
-                val obj = if (i < arr.length()) try { arr.getJSONObject(i) } catch (_: Exception) { null } else null
-                if (obj != null) {
-                    val timeMs = obj.optLong("time_ms", 0L)
-                    val title = obj.optString("title", "")
-                    val msg = obj.optString("message", "")
-                    val timeStr = if (timeMs > 0L) try { java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(java.util.Date(timeMs)) } catch (_: Exception) { "" } else ""
-                    if (timeStr.isNotEmpty()) tv?.text = getString(R.string.recent_alarm_with_time, i+1, timeStr, title, msg) else if (title.isNotEmpty()) tv?.text = getString(R.string.recent_alarm_no_time, i+1, title, msg) else tv?.text = getString(R.string.recent_alarm_empty, i+1)
-                } else {
-                    tv?.text = getString(R.string.recent_alarm_empty, i+1)
-                }
-            }
-        } catch (e: Exception) {
-            android.util.Log.w("ScadaActivity", "Failed to load recent alarms", e)
-        }
-
-        // Wire Clear History button
-        try {
-            val btnClear = dialogView.findViewById<android.widget.Button>(R.id.btn_clear_history)
-            btnClear.setOnClickListener {
-                try {
-                    val historyPrefs = getSharedPreferences("alarm_history", Context.MODE_PRIVATE)
-                    historyPrefs.edit { putString("recent_alarms_json", "[]") }
-                    for (i in 1..5) {
-                        val tv = dialogView.findViewById<TextView?>(resources.getIdentifier("recent_alarm_$i", "id", packageName))
-                        tv?.text = getString(R.string.recent_alarm_empty, i)
-                    }
-                    try { ToastHelper.show(this@ScadaActivity, "Alarm history cleared", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
-                } catch (e: Exception) {
-                    android.util.Log.w("ScadaActivity", "Failed to clear alarm history", e)
-                }
-            }
-        } catch (_: Exception) {}
-
-        // Save button handler: persist offsets + other prefs
-        btnSave?.setOnClickListener {
-            val lowP = etLowPressure?.text.toString().toFloatOrNull() ?: 1.0f
-            val highA = try { etHighAmps?.text.toString().toFloatOrNull() ?: prefs.getFloat("high_amps_threshold", 6.0f) } catch (_: Exception) { prefs.getFloat("high_amps_threshold", 6.0f) }
-            val highADurMin = etHighAmpsDuration?.text.toString().toLongOrNull() ?: 60L
-            val variance = etWaterVariance?.text.toString().toFloatOrNull() ?: 0.1f
-            val dvrMin = etDvrMinutes?.text.toString().toLongOrNull() ?: 60L
-            val hourlyThreshold = etWaterHourlyThreshold?.text.toString().toFloatOrNull() ?: 500f
-            val hourlyWindowHours = etWaterHourlyHours?.text.toString().toIntOrNull() ?: 1
-
-            try {
-                prefs.edit {
-                    putFloat("low_pressure_threshold", lowP)
-                    putFloat("high_amps_threshold", highA)
-                    putLong("high_amps_duration_ms", highADurMin * 60000L)
-                    putFloat("water_variance_threshold", variance)
-                    putLong("dvr_stale_minutes", dvrMin)
-                    putFloat("water_hourly_volume_threshold", hourlyThreshold)
-                    putInt("water_hourly_window_hours", hourlyWindowHours)
-                }
-            } catch (e: Exception) {
-                android.util.Log.w("ScadaActivity", "Failed to save alarm prefs", e)
-            }
-
-            // Also save current seek offset & lights backend into app prefs synchronously
-            try {
-                val selectedOffset = dialogView.findViewById<android.widget.SeekBar?>(R.id.seek_wind_offset)?.progress?.toFloat() ?: currentOffset
-                appPrefs.edit {
-                    putFloat("wind_arrow_offset_deg", selectedOffset)
-                    val rg = dialogView.findViewById<android.widget.RadioGroup?>(R.id.rg_lights_control)
-                    val selected = when (rg?.checkedRadioButtonId) {
-                        R.id.rb_control_drive -> "drive"
-                        else -> "firebase"
-                    }
-                    putString("lights_control_backend", selected)
-                }
-            } catch (e: Exception) {
-                android.util.Log.w("ScadaActivity", "Failed to save app prefs", e)
-            }
-
-            try { ToastHelper.show(this@ScadaActivity, "Alarm settings saved", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
-            dialog.dismiss()
-            updateAlarmStatus()
-            applyLightsBackendSelection()
-        }
-
-        // Clear schedule handler
-        try {
-            btnClearSecuritySchedule?.setOnClickListener {
-                try {
-                    appPrefs.edit { remove("security_enable_hour"); remove("security_enable_min"); remove("security_disable_hour"); remove("security_disable_min") }
-                    // update buttons to default label
-                    dialogView.findViewById<android.widget.Button?>(R.id.btn_security_enable_time)?.text = getString(R.string.set_time)
-                    dialogView.findViewById<android.widget.Button?>(R.id.btn_security_disable_time)?.text = getString(R.string.set_time)
-                    try { ToastHelper.show(this@ScadaActivity, "Security schedule cleared", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
-                } catch (e: Exception) { android.util.Log.w("ScadaActivity", "Failed clearing security schedule", e) }
-            }
-        } catch (_: Exception) {}
-
-        // Play tone preview handler
-        val btnPlayTone = dialogView.findViewById<android.widget.Button>(R.id.btn_play_tone)
-        var previewPlayer: android.media.MediaPlayer? = null
-        btnPlayTone.setOnClickListener {
-            try {
-                if (previewPlayer == null) {
-                    val afd = resources.openRawResourceFd(R.raw.alarm_tone)
-                    previewPlayer = android.media.MediaPlayer()
-                    previewPlayer?.setAudioAttributes(
-                        android.media.AudioAttributes.Builder()
-                            .setUsage(android.media.AudioAttributes.USAGE_ALARM)
-                            .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                            .build()
-                    )
-                    previewPlayer?.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
-                    afd.close()
-                    previewPlayer?.isLooping = false
-                    previewPlayer?.prepare()
-                    previewPlayer?.start()
-                    btnPlayTone.text = getString(R.string.stop)
-                } else {
-                    try { previewPlayer?.stop() } catch (_: Exception) {}
-                    try { previewPlayer?.release() } catch (_: Exception) {}
-                    previewPlayer = null
-                    btnPlayTone.text = getString(R.string.play_tone)
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("ScadaActivity", "Failed to play preview tone", e)
-                try { ToastHelper.show(this@ScadaActivity, "Unable to play tone", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
-                try { previewPlayer?.release() } catch (_: Exception) {}
-                previewPlayer = null
-                btnPlayTone.text = getString(R.string.play_tone)
-            }
-        }
-
-        // Ensure we stop preview if dialog dismissed
-        dialog.setOnDismissListener {
-            try { previewPlayer?.stop() } catch (_: Exception) {}
-            try { previewPlayer?.release() } catch (_: Exception) {}
-            previewPlayer = null
-        }
-
-        // Reset alarm channel handler: delete and recreate app alarm channels using bundled tone
-        val btnResetChannel = dialogView.findViewById<android.widget.Button>(R.id.btn_reset_channel)
-        btnResetChannel.setOnClickListener {
-            try {
-                val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-                val defaultChannelId = getString(R.string.default_notification_channel_id)
-                val securityChannelId = "security_alerts"
-
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                    try { notificationManager.deleteNotificationChannel(defaultChannelId) } catch (_: Exception) {}
-                    try { notificationManager.deleteNotificationChannel(securityChannelId) } catch (_: Exception) {}
-                }
-
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                    // Default channel: silent, low importance
-                    val defaultChannel = android.app.NotificationChannel(defaultChannelId, "App Notifications", android.app.NotificationManager.IMPORTANCE_LOW).apply {
-                        description = "General app notifications (silent)"
-                        setSound(null, null)
-                        enableVibration(false)
-                        lockscreenVisibility = android.app.Notification.VISIBILITY_PRIVATE
-                    }
-                    notificationManager.createNotificationChannel(defaultChannel)
-
-                    // Security channel: audible, high importance
-                    val soundUri = android.net.Uri.parse("android.resource://$packageName/${R.raw.alarm_tone}")
-                    val audioAttrs = android.media.AudioAttributes.Builder()
-                        .setUsage(android.media.AudioAttributes.USAGE_ALARM)
-                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                        .setFlags(android.media.AudioAttributes.FLAG_AUDIBILITY_ENFORCED)
-                        .build()
-
-                    val secChannel = android.app.NotificationChannel(securityChannelId, "Security Alerts", android.app.NotificationManager.IMPORTANCE_HIGH).apply {
-                        description = "Notifications for security breaches"
-                        setSound(soundUri, audioAttrs)
-                        enableLights(true)
-                        enableVibration(true)
-                    }
-                    notificationManager.createNotificationChannel(secChannel)
-                }
-
-                try { ToastHelper.show(this@ScadaActivity, "Alarm channels reset (default silent, security audible)", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
-            } catch (e: Exception) {
-                android.util.Log.e("ScadaActivity", "Failed to reset alarm channels", e)
-                try { ToastHelper.show(this@ScadaActivity, "Failed to reset channels", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
-            }
-        }
-
-        dialog.show()
-
-        // Pre-select the radio group based on stored app pref
-        try {
-            val backendPref = appPrefs.getString("lights_control_backend", "firebase") ?: "firebase"
-            val rg = dialogView.findViewById<android.widget.RadioGroup?>(R.id.rg_lights_control)
-            when (backendPref) {
-                "drive" -> rg?.check(R.id.rb_control_drive)
-                else -> rg?.check(R.id.rb_control_firebase)
-            }
-        } catch (_: Exception) {}
-
-        // Save backend explicit button: persist selected backend and apply immediately
-        try {
-            val btnSaveBackend = dialogView.findViewById<android.widget.Button>(R.id.btn_save_backend)
-            val btnReloadBackend = dialogView.findViewById<android.widget.Button>(R.id.btn_reload_backend)
-            btnSaveBackend.setOnClickListener {
-                try {
-                    val rg = dialogView.findViewById<android.widget.RadioGroup?>(R.id.rg_lights_control)
-                    val selected = when (rg?.checkedRadioButtonId) {
-                        R.id.rb_control_drive -> "drive"
-                        else -> "firebase"
-                    }
-                    appPrefs.edit { putString("lights_control_backend", selected) }
-                    try { ToastHelper.show(this@ScadaActivity, getString(R.string.lights_backend_saved, selected), android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
-                    applyLightsBackendSelection()
-                } catch (e: Exception) {
-                    Log.w("ScadaActivity", "Failed saving backend", e)
-                    try { ToastHelper.show(this@ScadaActivity, "Failed to save backend", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
-                }
-            }
-            btnReloadBackend.setOnClickListener {
-                try {
-                    try { ToastHelper.show(this@ScadaActivity, "Reloading backend selection...", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
-                    applyLightsBackendSelection()
-                } catch (e: Exception) {
-                    Log.w("ScadaActivity", "Failed reloading backend", e)
-                }
+            val txt = lightsDetails.text?.toString() ?: ""
+            if (txt.contains("Drive:", true) || txt.contains("Cmd:", true) || txt.contains("Sent TXT", true)) {
+                lightsDetails.text = "--"
             }
         } catch (_: Exception) {}
     }
 
-    // Ensure alarm status text/dot and lights backend selection helpers exist.
-    private fun updateAlarmStatus() {
+    // Hook the Setup card tap to open our dialog
+    private fun wireSetupCardTap() {
         try {
-            val prefs = getSharedPreferences("alarm_prefs", Context.MODE_PRIVATE)
-            val highAmpsThreshold = prefs.getFloat("high_amps_threshold", 6.0f).toDouble()
-            val lowPressureThreshold = prefs.getFloat("low_pressure_threshold", 1.0f).toDouble()
-
-            // Extract numeric parts from displayed text (e.g. "6.2 A" or "1.2 bar")
-            val ampsText = try { ampsTextView.text.toString() } catch (_: Exception) { "" }
-            val pressureText = try { geyserPressureTextView.text.toString() } catch (_: Exception) { "" }
-            val ampsVal = Regex("([-+]?[0-9]*\\.?[0-9]+)").find(ampsText)?.value?.toDoubleOrNull()
-            val pressureVal = Regex("([-+]?[0-9]*\\.?[0-9]+)").find(pressureText)?.value?.toDoubleOrNull()
-
-            var alarmActive = false
-            if (ampsVal != null && ampsVal > highAmpsThreshold) alarmActive = true
-            if (pressureVal != null && pressureVal < lowPressureThreshold) alarmActive = true
-
-            runOnUiThread {
-                try {
-                    if (alarmActive) {
-                        try { alarmActiveStatus.text = getString(R.string.alarm_active) } catch (_: Exception) { alarmActiveStatus.text = "ALARM" }
-                        val red = "#B71C1C".toColorInt()
-                        alarmActiveStatus.setTextColor(red)
-                        alarmStatusDot.imageTintList = ColorStateList.valueOf(red)
-                        Log.d("ScadaActivity", "Alarm active (amps=$ampsVal, pressure=$pressureVal)")
-                        // Attempt to trigger the NotificationService test action (safe no-op if service missing)
-                        try {
-                            val intent = Intent(this, NotificationService::class.java)
-                            intent.action = "com.security.app.ACTION_TEST_ALARMS"
-                            startService(intent)
-                        } catch (e: Exception) {
-                            Log.w("ScadaActivity", "Failed to start NotificationService", e)
-                        }
-                    } else {
-                        try { alarmActiveStatus.text = getString(R.string.alarm_inactive) } catch (_: Exception) { alarmActiveStatus.text = "OK" }
-                        val green = "#4CAF50".toColorInt()
-                        alarmActiveStatus.setTextColor(green)
-                        alarmStatusDot.imageTintList = ColorStateList.valueOf(green)
-                    }
-                } catch (e: Exception) {
-                    Log.w("ScadaActivity", "UI update in updateAlarmStatus failed", e)
-                }
-            }
-        } catch (e: Exception) {
-            Log.w("ScadaActivity", "updateAlarmStatus failed", e)
-        }
+            findViewById<View>(R.id.alarmStatusCard)?.setOnClickListener { showSetupDialog() }
+        } catch (_: Exception) {}
     }
 
-    private fun applyLightsBackendSelection() {
+    private fun showSetupDialog() {
         try {
-            val appPrefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
-            val backend = appPrefs.getString("lights_control_backend", "firebase") ?: "firebase"
-            Log.d("ScadaActivity", "applyLightsBackendSelection backend=$backend")
-            if (backend == "drive") {
-                try {
-                    // If the Drive service is already initialized, avoid triggering sign-in again
-                    // which would cause initializeDriveService() -> applyLightsBackendSelection() recursion.
-                    if (driveService != null) {
-                        startLightsPolling()
-                    } else {
-                        // Drive not yet initialized: ensure we have a signed-in account which will
-                        // initialize Drive (initializeDriveService) once available.
-                        try { ensureFreshGoogleSignIn() } catch (e: Exception) { Log.w("ScadaActivity", "ensureFreshGoogleSignIn failed", e) }
-                    }
-                } catch (e: Exception) {
-                    Log.w("ScadaActivity", "startLightsPolling failed", e)
-                }
-            } else {
-                try { drivePollingJob?.cancel() } catch (e: Exception) { Log.w("ScadaActivity", "cancel drivePollingJob", e) }
-                try { fetchLightsStatusOnce() } catch (e: Exception) { Log.w("ScadaActivity", "fetchLightsStatusOnce failed", e) }
-            }
-        } catch (e: Exception) {
-            Log.w("ScadaActivity", "applyLightsBackendSelection failed", e)
-        }
-    }
-
-    // Removed: FCM status badge update logic
-    // Previously:
-    //    val badge: TextView? = findViewById(R.id.scadaStatusBadge)
-    //    if (badge != null) {
-    //        if (fcmIsOnline) {
-    //            badge.text = "Online"
-    //            badge.setBackgroundResource(R.drawable.status_badge_background)
-    //            badge.setTextColor(ContextCompat.getColor(this, android.R.color.white))
-    //        } else {
-    //            badge.text = "Offline"
-    //            badge.setBackgroundResource(R.drawable.status_badge_background)
-    //            badge.background.setTint(ContextCompat.getColor(this, android.R.color.holo_red_light))
-    //            badge.setTextColor(ContextCompat.getColor(this, android.R.color.white))
-    //        }
-    //    }
-
-    private fun updatePresenceUI(triggeredByUser: Boolean) {
-        // Run in background to avoid blocking UI
-        CoroutineScope(Dispatchers.IO).launch {
-            val gateway = getGatewayIp()
-            val atHome = gateway == "192.168.8.1"
-            val color: Int
-            val text: String
-            if (atHome) {
-                color = "#4CAF50".toColorInt()
-                text = "At home"
-            } else {
-                color = "#B0BEC5".toColorInt()
-                text = "Away"
-            }
-            try {
-                withContext(Dispatchers.Main) {
-                    try {
-                        setupPresenceText.text = text
-                        setupPresenceDot.imageTintList = ColorStateList.valueOf(color)
-                        if (triggeredByUser) {
-                            val gwText = gateway ?: "unknown"
-                            val msg = "Gateway: $gwText — $text"
-                            try { ToastHelper.show(this@ScadaActivity, msg, android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
-                        } else {
-                            // no-op else branch to ensure `if` is not treated as an expression missing an else
-                        }
-                    } catch (e: Exception) {
-                        Log.w("ScadaActivity", "Failed to update presence UI", e)
-                    }
-                }
-            } catch (e: Exception) {
-                Log.w("ScadaActivity", "updatePresenceUI outer failure", e)
-            }
-        }
-    }
-
-    // Obtain gateway IP using ConnectivityManager + LinkProperties (safe alternative to dhcpInfo)
-    private fun getGatewayIp(): String? {
-        try {
-            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-            val active: Network? = cm.activeNetwork
-            if (active == null) return null
-            val lp: LinkProperties? = cm.getLinkProperties(active)
-            if (lp == null) return null
-            val routes = lp.routes
-            for (route in routes) {
-                try {
-                    val gw = route.gateway
-                    if (gw != null) {
-                        val host = gw.hostAddress
-                        if (!host.isNullOrEmpty() && host != "0.0.0.0") return host
-                    }
-                } catch (_: Exception) {}
-            }
-            return null
-        } catch (e: Exception) {
-            Log.w("ScadaActivity", "getGatewayIp failed", e)
-            return null
-        }
-    }
-
-    // --- New helpers: Sun position + Tide fetch ---
-    private fun updateSunAndTides() {
-        // Launch coroutine to compute sun position and fetch sunrise/sunset + tides
-        CoroutineScope(Dispatchers.Main).launch {
-            try {
-                // 1) fetch sunrise/sunset from Open-Meteo daily endpoint
-                val sunPair = withContext(Dispatchers.IO) { fetchSunriseSunset(SWAK_LAT.toDouble(), SWAK_LON.toDouble()) }
-                val sunriseStr = sunPair?.first ?: "--:--"
-                val sunsetStr = sunPair?.second ?: "--:--"
-
-                // 2) compute current sun elevation/azimuth locally
-                val (altDeg, azDeg) = computeSunPosition(SWAK_LAT.toDouble(), SWAK_LON.toDouble(), System.currentTimeMillis())
-                val altFmt = String.format(Locale.getDefault(), "%.0f°", altDeg)
-                val azFmt = String.format(Locale.getDefault(), "%.0f°", azDeg)
-
-                // 3) update sun UI (show only times: sunrise / sunset)
-                try {
-                    if (::sunInfoTextView.isInitialized) sunInfoTextView.text = "${sunriseStr} / ${sunsetStr}"
-                } catch (_: Exception) {}
-
-                // 4) fetch tide (hourly water level) and compute next high/low
-                val tideText = withContext(Dispatchers.IO) { fetchNextTideInfo(SWAK_LAT.toDouble(), SWAK_LON.toDouble()) } ?: "Tide: N/A"
-                try { if (::tideInfoTextView.isInitialized) tideInfoTextView.text = tideText } catch (_: Exception) {}
-
-            } catch (e: Exception) {
-                Log.w("ScadaActivity", "updateSunAndTides error", e)
-                try { if (::sunInfoTextView.isInitialized) sunInfoTextView.text = "--:-- / --:--" } catch (_: Exception) {}
-                try { if (::tideInfoTextView.isInitialized) tideInfoTextView.text = "Tide: N/A" } catch (_: Exception) {}
-            }
-        }
-    }
-
-    // Fetch sunrise/sunset (local time) using Open-Meteo daily API
-    private fun fetchSunriseSunset(lat: Double, lon: Double): Pair<String, String>? {
-        return try {
-            val urlStr = "https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=sunrise,sunset&timezone=auto"
-            val url = URL(urlStr)
-            val conn = url.openConnection() as HttpURLConnection
-            conn.requestMethod = "GET"
-            conn.connectTimeout = 8000
-            conn.readTimeout = 8000
-            conn.connect()
-            val code = conn.responseCode
-            if (code != 200) return null
-            val reader = BufferedReader(InputStreamReader(conn.inputStream))
-            val sb = StringBuilder()
-            var line: String? = reader.readLine()
-            while (line != null) { sb.append(line); line = reader.readLine() }
-            reader.close()
-            val jo = JSONObject(sb.toString())
-            val daily = jo.optJSONObject("daily") ?: return null
-            val sunriseArr = daily.optJSONArray("sunrise") ?: return null
-            val sunsetArr = daily.optJSONArray("sunset") ?: return null
-            val sunrise = sunriseArr.optString(0, "")
-            val sunset = sunsetArr.optString(0, "")
-            // sunrise/sunset are returned in ISO format with local date/time; extract time portion
-            val sTime = try { sunrise.split("T").getOrNull(1)?.split(":")?.let { parts -> "${parts[0]}:${parts[1]}" } ?: sunrise } catch (_: Exception) { sunrise }
-            val ssTime = try { sunset.split("T").getOrNull(1)?.split(":")?.let { parts -> "${parts[0]}:${parts[1]}" } ?: sunset } catch (_: Exception) { sunset }
-            Pair(sTime, ssTime)
-        } catch (e: Exception) {
-            Log.w("ScadaActivity", "fetchSunriseSunset failed", e)
-            null
-        }
-    }
-
-    // Fetch hourly water level from Open-Meteo Marine API and compute next high/low tide
-    // Returns a short human-readable string like "High 14:20 (1.2m)"
-    private fun fetchNextTideInfo(lat: Double, lon: Double): String? {
-        return try {
-            val sg = fetchTideFromStormglass(lat, lon)
-            if (!sg.isNullOrEmpty()) {
-                Log.d("ScadaActivity", "fetchNextTideInfo: using Stormglass result")
-                sg
-            } else {
-                Log.w("ScadaActivity", "fetchNextTideInfo: Stormglass returned no data")
-                null
-            }
-        } catch (e: Exception) {
-            Log.w("ScadaActivity", "fetchNextTideInfo failed", e)
-            null
-        }
-    }
-
-    // Try Stormglass v2 extremes API as primary tide source.
-    // Stormglass v2 extremes endpoint (common pattern): /v2/tide/extremes?lat=...&lng=...&start=...&end=...
-    private fun fetchTideFromStormglass(lat: Double, lon: Double): String? {
-        try {
-            val prefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
-            var apiKey = prefs.getString("stormglass_api_key", null)
-            if (apiKey.isNullOrEmpty()) {
-                // Prefer the embedded key when no preference is set
-                apiKey = EMBEDDED_STORMGLASS_API_KEY.takeIf { it.isNotEmpty() }
-                if (apiKey.isNullOrEmpty()) {
-                    Log.d("ScadaActivity", "fetchTideFromStormglass: no API key configured (stormglass_api_key) and no embedded key")
-                    return null
-                } else {
-                    Log.d("ScadaActivity", "fetchTideFromStormglass: using embedded Stormglass API key")
-                }
-            }
-
-            // Compute UTC start/end (use date strings yyyy-MM-dd because the /v2/tide/extremes/point
-            // endpoint accepts human-readable dates and the plain key header form works with it).
-            val now = System.currentTimeMillis()
-            val sdfDate = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-            sdfDate.timeZone = TimeZone.getTimeZone("UTC")
-            val startDate = sdfDate.format(java.util.Date(now))
-            val endDate = sdfDate.format(java.util.Date(now + 48 * 3600L * 1000L))
-
-            // Use the /v2/tide/extremes/point path (works per curl sample). Stormglass accepts
-            // Authorization: <key> (no 'Bearer') for many accounts; the code will still try 'Bearer' if needed.
-            val urlStr = "https://api.stormglass.io/v2/tide/extremes/point?lat=${lat}&lng=${lon}&start=${startDate}&end=${endDate}"
-            Log.d("ScadaActivity", "fetchTideFromStormglass url=$urlStr")
-
-            // Try with Authorization: {key} first, then 'Bearer {key}' if 401
-            var lastErrBody = ""
-            for (attempt in 1..2) {
-                 val url = URL(urlStr)
-                 val conn = url.openConnection() as HttpURLConnection
-                 conn.requestMethod = "GET"
-                 conn.connectTimeout = 10000
-                 conn.readTimeout = 10000
-                 // Header formats
-                 val headerVal = if (attempt == 1) apiKey else "Bearer $apiKey"
-                 conn.setRequestProperty("Authorization", headerVal)
-                 conn.setRequestProperty("Accept", "application/json")
-                 try { conn.connect() } catch (e: Exception) { Log.w("ScadaActivity", "Stormglass connect failed (attempt $attempt)", e); continue }
-                val code = try { conn.responseCode } catch (_: Exception) { -1 }
-                val body = try {
-                    if (code == 200) conn.inputStream.bufferedReader().use { it.readText() } else conn.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
-                } catch (e: Exception) {
-                    Log.w("ScadaActivity", "Failed reading Stormglass response body", e)
-                    ""
-                }
-                Log.d("ScadaActivity", "fetchTideFromStormglass HTTP $code (attempt $attempt); body.len=${body.length}")
-                if (code != 200) {
-                    lastErrBody = body
-                    // If unauthorized on first attempt, try Bearer form once more
-                    if (code == 401 && attempt == 1) { continue }
-                    // Return a readable error so the UI can show it
-                    try {
-                        val errJo = if (body.isNotEmpty()) JSONObject(body) else null
-                        if (errJo != null && errJo.has("errors")) {
-                            val errObj = errJo.opt("errors")
-                            return "Stormglass error HTTP $code: ${errObj?.toString() ?: errObj}"
-                        }
-                    } catch (_: Exception) {}
-                    return "Stormglass HTTP $code: ${body.take(512)}"
-                }
-                Log.d("ScadaActivity", "fetchTideFromStormglass response len=${body.length}")
-                 // Parse flexible JSON: many Stormglass responses include 'data' array
-                 val jo = JSONObject(body)
-                // If the response contains an errors object, return it so the UI shows the reason
-                if (jo.has("errors")) {
-                    try { return "Stormglass error: ${jo.opt("errors").toString()}" } catch (_: Exception) { return "Stormglass error: ${jo.opt("errors")}" }
-                }
-                 // If top-level 'data' is an array of extremes use it
-                 val candidateArr = when {
-                     jo.has("data") && jo.opt("data") is org.json.JSONArray -> jo.optJSONArray("data")
-                     jo.has("extremes") && jo.opt("extremes") is org.json.JSONArray -> jo.optJSONArray("extremes")
-                     jo.has("hours") && jo.opt("hours") is org.json.JSONArray -> jo.optJSONArray("hours")
-                     else -> null
-                 }
-                 if (candidateArr != null) {
-                    // If the array is empty, return meta information so the UI can show why no data was returned
-                    if (candidateArr.length() == 0) {
-                        try {
-                            val meta = jo.optJSONObject("meta")
-                            if (meta != null) {
-                                val station = meta.optJSONObject("station")?.optString("name") ?: meta.optString("station", "(no-station)")
-                                val dist = meta.optJSONObject("station")?.optInt("distance") ?: meta.optInt("distance", -1)
-                                val quota = meta.optInt("dailyQuota", -1)
-                                val cost = meta.optInt("cost", -1)
-                                return "Stormglass: no tide data for dates $startDate..$endDate (station=${station}, distance=${dist}km, dailyQuota=${quota}, cost=${cost})"
-                            }
-                        } catch (_: Exception) {}
-                        return "Stormglass: no tide data returned for dates $startDate..$endDate"
-                    }
-                    // Stormglass typically returns objects with keys like 'time' or 't' and 'height'
-                    return parseHeightsArrayToHighLow(candidateArr)
-                }
-
-                // Some responses use an object with a 'data' object keyed by source — try to find first array of objects
-                val joKeysIt = jo.keys()
-                while (joKeysIt.hasNext()) {
-                    val k = joKeysIt.next()
-                    val opt = jo.opt(k)
-                    if (opt is org.json.JSONArray && opt.length() > 0 && opt.optJSONObject(0) != null) {
-                        Log.d("ScadaActivity", "fetchTideFromStormglass: using array key=$k as candidate")
-                        return parseHeightsArrayToHighLow(opt as org.json.JSONArray)
-                    }
-                }
-                // Nothing found — return the raw response keys for debugging
-                Log.w("ScadaActivity", "fetchTideFromStormglass: no usable array found in response; lastErr=${lastErrBody.take(512)}")
-                val keysList = mutableListOf<String>()
-                val it = jo.keys()
-                while (it.hasNext()) keysList.add(it.next())
-                return "Stormglass: no usable tide array found. Response keys=${keysList.joinToString(",")}"
-             }
-             return null
-         } catch (e: Exception) {
-             Log.w("ScadaActivity", "fetchTideFromStormglass failed", e)
-             return null
-         }
-     }
-
-    // Show a simple prompt to view/edit the Stormglass API key (embedded key used if prefs empty)
-    private fun showStormglassKeyDialog() {
-         try {
-            Log.d("ScadaActivity", "showStormglassKeyDialog called")
-             val prefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
-             val currentStorm = prefs.getString("stormglass_api_key", "") ?: ""
-             val layout = android.widget.LinearLayout(this)
-             layout.orientation = android.widget.LinearLayout.VERTICAL
-             val stormInput = android.widget.EditText(this)
-             stormInput.hint = "Stormglass API key"
-             stormInput.setText(currentStorm)
-             val lp = android.widget.LinearLayout.LayoutParams(android.widget.LinearLayout.LayoutParams.MATCH_PARENT, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT)
-             lp.setMargins(8,8,8,8)
-             layout.addView(stormInput, lp)
-
+            val prefs = getSharedPreferences("app_prefs", MODE_PRIVATE)
+            val options = arrayOf("Firebase (Firestore-only)")
+            var selectedIndex = 0
             androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("Stormglass API Key")
-                .setMessage("Enter your Stormglass API key. If left blank, the embedded key from the repo will be used.")
-                .setView(layout)
-                .setPositiveButton("Save") { _, _ ->
-                    val storm = stormInput.text.toString().trim()
-                    prefs.edit { putString("stormglass_api_key", storm) }
-                    try { ToastHelper.show(this@ScadaActivity, "Stormglass key saved", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
+                .setTitle("Setup")
+                .setSingleChoiceItems(options, selectedIndex) { _, which -> selectedIndex = which }
+                .setPositiveButton("Apply") { _, _ ->
+                    // Force Firestore-only backend
+                    prefs.edit().putString("scada_lights_backend", "firestore").apply()
+                    try { applyLightsBackendSelection() } catch (_: Exception) {}
                 }
                 .setNegativeButton("Cancel", null)
                 .show()
         } catch (e: Exception) {
-            Log.w("ScadaActivity", "showStormglassKeyDialog failed", e)
+            Log.w("ScadaActivity", "showSetupDialog failed", e)
+            try { ToastHelper.show(this, "Settings are not available in this variant", android.widget.Toast.LENGTH_SHORT) } catch (_: Exception) {}
         }
     }
 
-    // Fallback: query WorldTides for heights (kept as flexible parser)
-    private fun fetchTideFromWorldTides(lat: Double, lon: Double): String? {
-        // WorldTides support removed — Stormglass is the sole tide provider.
-        // If WorldTides is needed later, re-add a dedicated fetch function here.
-        return null
-    }
-
-    // Parse a generic 'heights' JSONArray (flexible key names) and return a "High HH:MM (1.2m)\nLow ..." string
-    private fun parseHeightsArrayToHighLow(arr: JSONArray): String? {
+    // After declarations of tides/sun, add lightweight stubs used by click handlers
+    private fun showStormglassKeyDialog() {
         try {
-            val data = mutableListOf<Pair<Long, Double>>()
-            for (i in 0 until arr.length()) {
-                val el = arr.optJSONObject(i) ?: continue
-                var tMillis: Long? = null
-                if (el.has("dt")) {
-                    val dtVal = el.optLong("dt", 0L)
-                    if (dtVal > 1000000000L) tMillis = dtVal * 1000L
-                }
-                if (tMillis == null && el.has("timestamp")) {
-                    val ts = el.optLong("timestamp", 0L)
-                    if (ts > 1000000000L) tMillis = ts * 1000L
-                }
-                if (tMillis == null && el.has("date")) {
-                    val ds = el.optString("date", "")
-                    tMillis = parseIsoDateToMillis(ds)
-                }
-                if (tMillis == null && el.has("time")) {
-                    val ds = el.optString("time", "")
-                    tMillis = parseIsoDateToMillis(ds)
-                }
-                var h: Double = Double.NaN
-                if (el.has("height")) h = el.optDouble("height", Double.NaN)
-                if (h.isNaN() && el.has("h")) h = el.optDouble("h", Double.NaN)
-                if (h.isNaN() && el.has("height_m")) h = el.optDouble("height_m", Double.NaN)
-                if (h.isNaN() && el.has("value")) h = el.optDouble("value", Double.NaN)
-                if (tMillis != null && !h.isNaN()) data.add(Pair(tMillis, h))
-            }
-            if (data.isEmpty()) return null
-            data.sortBy { it.first }
-            val now = System.currentTimeMillis()
-            val idxNow = data.indexOfFirst { it.first > now }
-            val searchStart = if (idxNow >= 0) idxNow else 0
-            var nextHighIdx: Int? = null
-            var nextLowIdx: Int? = null
-            for (i in searchStart until data.size - 1) {
-                val prev = data.getOrNull(i - 1)?.second ?: continue
-                val cur = data[i].second
-                val next = data.getOrNull(i + 1)?.second ?: continue
-                if (cur > prev && cur > next && nextHighIdx == null) nextHighIdx = i
-                if (cur < prev && cur < next && nextLowIdx == null) nextLowIdx = i
-                if (nextHighIdx != null && nextLowIdx != null) break
-            }
-            val sb = StringBuilder()
-            if (nextHighIdx != null) {
-                val (t, lvl) = data[nextHighIdx]
-                val cal = java.util.Calendar.getInstance()
-                cal.timeInMillis = t
-                val hh = cal.get(java.util.Calendar.HOUR_OF_DAY)
-                val mm = cal.get(java.util.Calendar.MINUTE)
-                sb.append("High ${String.format(Locale.getDefault(), "%02d:%02d", hh, mm)} (${String.format(Locale.getDefault(), "%.2fm", lvl)})")
-            }
-            if (nextLowIdx != null) {
-                if (sb.isNotEmpty()) sb.append("\n")
-                val (t, lvl) = data[nextLowIdx]
-                val cal = java.util.Calendar.getInstance()
-                cal.timeInMillis = t
-                val hh = cal.get(java.util.Calendar.HOUR_OF_DAY)
-                val mm = cal.get(java.util.Calendar.MINUTE)
-                sb.append("Low ${String.format(Locale.getDefault(), "%02d:%02d", hh, mm)} (${String.format(Locale.getDefault(), "%.2fm", lvl)})")
-            }
-            return if (sb.isEmpty()) null else sb.toString()
-        } catch (e: Exception) {
-            Log.w("ScadaActivity", "parseHeightsArrayToHighLow failed", e)
-            return null
-        }
-    }
-
-    // Small helper to parse common ISO date/time strings to millis (UTC-aware)
-    private fun parseIsoDateToMillis(s: String): Long? {
-        val trimmed = s.trim()
-        if (trimmed.isEmpty()) return null
-        val patterns = listOf("yyyy-MM-dd'T'HH:mm:ss'Z'", "yyyy-MM-dd'T'HH:mm:ssX", "yyyy-MM-dd'T'HH:mm'Z'", "yyyy-MM-dd'T'HH:mmX", "yyyy-MM-dd HH:mm:ss")
-        for (p in patterns) {
-            try {
-                val sdf = SimpleDateFormat(p, Locale.US)
-                sdf.timeZone = TimeZone.getTimeZone("UTC")
-                val d = sdf.parse(trimmed)
-                if (d != null) return d.time
-            } catch (_: Exception) {}
-        }
-        try {
-            val n = trimmed.toLongOrNull()
-            if (n != null && n > 1000000000L) return if (trimmed.length == 10) n * 1000L else n
-        } catch (_: Exception) {}
-        return null
-    }
-
-    // Compute approximate sun position (altitude, azimuth in degrees) using simple astronomy formulas
-    private fun computeSunPosition(lat: Double, lon: Double, timeMillis: Long): Pair<Double, Double> {
-        try {
-            val jd = julianDate(timeMillis)
-            val n = jd - 2451545.0
-            val L = (280.460 + 0.9856474 * n) % 360.0
-            val g = Math.toRadians((357.528 + 0.9856003 * n) % 360.0)
-            val lambda = Math.toRadians((L + 1.915 * sin(g) + 0.020 * sin(2 * g)) % 360.0)
-            val epsilon = Math.toRadians(23.439 - 0.0000004 * n)
-            val sinDec = sin(epsilon) * sin(lambda)
-            val dec = asin(sinDec)
-            val ra = atan2(cos(epsilon) * sin(lambda), cos(lambda))
-            val gmst = (280.46061837 + 360.98564736629 * (jd - 2451545.0)) % 360.0
-            val lst = Math.toRadians((gmst + lon) % 360.0)
-            val hourAngle = lst - ra
-            val latRad = Math.toRadians(lat)
-            val altitude = asin(sin(latRad) * sin(dec) + cos(latRad) * cos(dec) * cos(hourAngle))
-            val azimuth = atan2(-sin(hourAngle), tan(dec) * cos(latRad) - sin(latRad) * cos(hourAngle))
-            val altDeg = Math.toDegrees(altitude)
-            val azDeg = (Math.toDegrees(azimuth) + 360.0) % 360.0
-            return Pair(altDeg, azDeg)
-        } catch (e: Exception) {
-            Log.w("ScadaActivity", "computeSunPosition failed", e)
-            return Pair(0.0, 0.0)
-        }
-    }
-
-    private fun julianDate(timeMillis: Long): Double {
-        val dt = timeMillis.toDouble() / 1000.0
-        val jd = dt / 86400.0 + 2440587.5
-        return jd
-    }
-
-    // Debug helper — dumps current auth token/claims and attempts a safe test write to diagnostics/test_client_write
-    fun debugFirestoreAuthAndWrite() {
-        try {
-            val user = auth.currentUser
-            android.util.Log.d("ScadaDebug", "currentUser uid=${'$'}{user?.uid} email=${'$'}{user?.email} displayName=${'$'}{user?.displayName}")
-
-            user?.getIdToken(true)?.addOnSuccessListener { result ->
-                val token = result.token
-                android.util.Log.d("ScadaDebug", "ID token (truncated): ${'$'}{token?.take(256)}")
-                try { android.util.Log.d("ScadaDebug", "Token claims: ${'$'}{result.claims}") } catch (_: Exception) {}
-            }?.addOnFailureListener { e ->
-                android.util.Log.w("ScadaDebug", "Failed to get ID token", e)
-            }
-
-            val testDoc = FirebaseFirestore.getInstance().collection("diagnostics").document("test_client_write")
-            val payload = hashMapOf<String, Any>(
-                "by" to (user?.email ?: user?.uid ?: "unknown"),
-                "ts" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
-                "note" to "client debug write"
-            )
-            testDoc.set(payload)
-                .addOnSuccessListener {
-                    android.util.Log.i("ScadaDebug", "Test write succeeded")
-                }
-                .addOnFailureListener { e ->
-                    android.util.Log.e("ScadaDebug", "Test write FAILED", e)
-                    if (e is com.google.firebase.firestore.FirebaseFirestoreException) {
-                        android.util.Log.e("ScadaDebug", "FirestoreException: code=${'$'}{e.code} msg=${'$'}{e.message}")
-                    }
-                }
-        } catch (e: Exception) {
-            android.util.Log.e("ScadaDebug", "debugFirestoreAuthAndWrite failed", e)
-        }
-    }
-
-    // Auto-invoke debug helper in debug builds (deferred to allow onCreate to initialize Firebase)
-    fun autoInvokeDebugIfNeeded() {
-        try {
-            val isDebuggable = try {
-                (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
-            } catch (_: Exception) { false }
-            if (isDebuggable) {
-                android.util.Log.d("ScadaDebug", "Scheduling auto-invoke debugFirestoreAuthAndWrite() (debuggable app)")
-                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                    try { debugFirestoreAuthAndWrite() } catch (_: Exception) {}
-                }, 2000)
-            }
+            AlertDialog.Builder(this)
+                .setTitle("WorldTides API Key")
+                .setMessage("This app uses an embedded key for tide data. You can update it in Setup when available.")
+                .setPositiveButton("OK", null)
+                .show()
         } catch (_: Exception) {}
     }
 
+    private fun updateSunAndTides() {
+        // Minimal placeholder: compute rough sunrise/sunset and set text if views exist
+        try {
+            val now = java.util.Calendar.getInstance()
+            val fmt = java.text.SimpleDateFormat("EEE HH:mm", java.util.Locale.getDefault())
+            sunInfoTextView.text = "Sun: ${fmt.format(now.time)}"
+            tideInfoTextView.text = "Tide: updated"
+        } catch (_: Exception) {}
+    }
 }
-

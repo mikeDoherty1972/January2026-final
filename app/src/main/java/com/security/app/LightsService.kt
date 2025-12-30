@@ -36,7 +36,6 @@ class LightsService(
             val desired = turnOn
             val cmd = if (turnOn) "on" else "off"
             val nonce = System.currentTimeMillis() // ensure every press produces a unique change
-
             // Primary app-facing controls doc (kept for UI/state reflection)
             val controlsDoc = db.collection("scada_controls").document("lights")
             val controlsPayload = hashMapOf<String, Any>(

@@ -79,7 +79,8 @@ class SecurityActivity : BaseActivity() {
     private fun renderRecentActivityPreview() {
         val lines = filteredSecurityActivityAll()
         if (lines.isNotEmpty()) {
-            recentActivityText.text = lines.takeLast(5).reversed().joinToString("\n")
+            // Show the last 50 security-related lines (previously 5) and let NestedScrollView handle scrolling
+            recentActivityText.text = lines.takeLast(50).reversed().joinToString("\n")
             try { recentActivityText.setTextColor(resources.getColor(android.R.color.white, theme)) } catch (_: Exception) {}
         } else {
             recentActivityText.text = "No recent activity"
