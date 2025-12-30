@@ -1,0 +1,153 @@
+Index: app/src/main/java/com/security/app/ImageViewActivity.kt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>package com.security.app\r\n\r\nimport android.os.Bundle\r\nimport android.widget.Button\r\nimport android.widget.ImageView\r\nimport com.bumptech.glide.Glide\r\n\r\nclass ImageViewActivity : BaseActivity() {\r\n\r\n    override fun onCreate(savedInstanceState: Bundle?) {\r\n        super.onCreate(savedInstanceState)\r\n        setContentView(R.layout.activity_image_view)\r\n\r\n        val imageView = findViewById<ImageView>(R.id.imageView)\r\n        val backButton = findViewById<Button>(R.id.backButton)\r\n        val imageUrl = intent.getStringExtra(\"IMAGE_URL\")\r\n\r\n        if (imageUrl != null) {\r\n            Glide.with(this)\r\n                .load(imageUrl)\r\n                .into(imageView)\r\n        }\r\n\r\n        backButton.setOnClickListener {\r\n            finish()\r\n        }\r\n    }\r\n}\r\n
+===================================================================
+diff --git a/app/src/main/java/com/security/app/ImageViewActivity.kt b/app/src/main/java/com/security/app/ImageViewActivity.kt
+--- a/app/src/main/java/com/security/app/ImageViewActivity.kt	(revision 9b4828b26706226d3eb6298c2c5bb6c491ad2d69)
++++ b/app/src/main/java/com/security/app/ImageViewActivity.kt	(date 1762399698097)
+@@ -1,9 +1,19 @@
+ package com.security.app
+ 
++import android.graphics.drawable.Drawable
+ import android.os.Bundle
++import android.util.Log
++import android.view.View
+ import android.widget.Button
+ import android.widget.ImageView
++import android.widget.ProgressBar
++import android.widget.Toast
++import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+ import com.bumptech.glide.Glide
++import com.bumptech.glide.load.DataSource
++import com.bumptech.glide.load.engine.GlideException
++import com.bumptech.glide.request.RequestListener
++import com.bumptech.glide.request.target.Target
+ 
+ class ImageViewActivity : BaseActivity() {
+ 
+@@ -13,13 +23,65 @@
+ 
+         val imageView = findViewById<ImageView>(R.id.imageView)
+         val backButton = findViewById<Button>(R.id.backButton)
++        val progress = findViewById<ProgressBar>(R.id.imageProgress)
++        val swipeRefresh = findViewById<SwipeRefreshLayout>(R.id.swipeImageRefresh)
+         val imageUrl = intent.getStringExtra("IMAGE_URL")
+ 
+-        if (imageUrl != null) {
+-            Glide.with(this)
+-                .load(imageUrl)
+-                .into(imageView)
++        fun loadImage() {
++            if (imageUrl != null) {
++                progress.visibility = View.VISIBLE
++                swipeRefresh.isRefreshing = true
++                Glide.with(this)
++                    .load(imageUrl)
++                    .placeholder(android.R.drawable.ic_menu_report_image)
++                    .error(android.R.drawable.ic_dialog_alert)
++                    .listener(object : RequestListener<Drawable> {
++                        override fun onLoadFailed(
++                            e: GlideException?,
++                            model: Any?,
++                            target: Target<Drawable>?,
++                            isFirstResource: Boolean
++                        ): Boolean {
++                            // Log full exception for debugging
++                            Log.e("ImageViewActivity", "Glide load failed for URL: $imageUrl", e)
++
++                            runOnUiThread {
++                                progress.visibility = View.GONE
++                                swipeRefresh.isRefreshing = false
++                                Toast.makeText(this@ImageViewActivity, "Failed to load image: ${e?.rootCauses?.firstOrNull()?.message ?: e?.message}", Toast.LENGTH_LONG).show()
++                            }
++                            // Let Glide set the error drawable
++                            return false
++                        }
++
++                        override fun onResourceReady(
++                            resource: Drawable?,
++                            model: Any?,
++                            target: Target<Drawable>?,
++                            dataSource: DataSource?,
++                            isFirstResource: Boolean
++                        ): Boolean {
++                            runOnUiThread {
++                                progress.visibility = View.GONE
++                                swipeRefresh.isRefreshing = false
++                            }
++                            return false
++                        }
++                    })
++                    .into(imageView)
++            }
+         }
++
++        // Initial load
++        loadImage()
++
++        // Pull to refresh on the image viewer
++        swipeRefresh.setOnRefreshListener {
++            loadImage()
++        }
++
++        // Tap image for quick refresh as well
++        imageView.setOnClickListener { loadImage() }
+ 
+         backButton.setOnClickListener {
+             finish()
+Index: app/src/main/res/layout/activity_image_view.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+><?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n<RelativeLayout xmlns:android=\"http://schemas.android.com/apk/res/android\"\r\n    android:layout_width=\"match_parent\"\r\n    android:layout_height=\"match_parent\"\r\n    android:background=\"?android:attr/colorBackground\">\r\n\r\n    <ImageView\r\n        android:id=\"@+id/imageView\"\r\n        android:layout_width=\"match_parent\"\r\n        android:layout_height=\"match_parent\"\r\n        android:scaleType=\"fitCenter\" />\r\n\r\n    <Button\r\n        android:id=\"@+id/backButton\"\r\n        android:layout_width=\"wrap_content\"\r\n        android:layout_height=\"wrap_content\"\r\n        android:text=\"Back\"\r\n        android:layout_alignParentBottom=\"true\"\r\n        android:layout_centerHorizontal=\"true\"\r\n        android:layout_marginBottom=\"16dp\" />\r\n\r\n</RelativeLayout>\r\n
+===================================================================
+diff --git a/app/src/main/res/layout/activity_image_view.xml b/app/src/main/res/layout/activity_image_view.xml
+--- a/app/src/main/res/layout/activity_image_view.xml	(revision 9b4828b26706226d3eb6298c2c5bb6c491ad2d69)
++++ b/app/src/main/res/layout/activity_image_view.xml	(date 1762399011219)
+@@ -4,17 +4,40 @@
+     android:layout_height="match_parent"
+     android:background="?android:attr/colorBackground">
+ 
+-    <ImageView
+-        android:id="@+id/imageView"
+-        android:layout_width="match_parent"
+-        android:layout_height="match_parent"
+-        android:scaleType="fitCenter" />
++    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
++        android:id="@+id/swipeImageRefresh"
++        android:layout_width="match_parent"
++        android:layout_height="match_parent">
++
++        <FrameLayout
++            android:layout_width="match_parent"
++            android:layout_height="match_parent">
++
++            <ImageView
++                android:id="@+id/imageView"
++                android:layout_width="match_parent"
++                android:layout_height="match_parent"
++                android:scaleType="fitCenter"
++                android:contentDescription="@string/image_view_content" />
++
++            <ProgressBar
++                android:id="@+id/imageProgress"
++                style="?android:attr/progressBarStyleLarge"
++                android:layout_width="48dp"
++                android:layout_height="48dp"
++                android:layout_gravity="center"
++                android:layout_margin="0dp"
++                android:visibility="gone" />
++
++        </FrameLayout>
++
++    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+ 
+     <Button
+         android:id="@+id/backButton"
+         android:layout_width="wrap_content"
+         android:layout_height="wrap_content"
+-        android:text="Back"
++        android:text="@string/back_button"
+         android:layout_alignParentBottom="true"
+         android:layout_centerHorizontal="true"
+         android:layout_marginBottom="16dp" />

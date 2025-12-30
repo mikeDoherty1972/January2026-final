@@ -1,0 +1,646 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:padding="12dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <!-- Dialog title -->
+        <TextView
+            android:id="@+id/alarmsTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/alarms_title"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp"
+            android:textColor="#6A1B9A" />
+
+        <!-- Thresholds card -->
+        <androidx.cardview.widget.CardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            app:cardCornerRadius="10dp"
+            app:cardElevation="4dp"
+            app:cardUseCompatPadding="true">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/thresholds"
+                    android:textStyle="bold"
+                    android:textSize="14sp"
+                    android:layout_marginBottom="8dp"
+                    android:textColor="#4A148C" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/dvr_pulse_stale"
+                    android:textSize="12sp" />
+
+                <EditText
+                    android:id="@+id/et_dvr_stale_minutes"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:hint="@string/hint_60"
+                    android:inputType="number"
+                    android:textSize="14sp"
+                    android:autofillHints="none" />
+
+                <!-- Two-column row -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:orientation="horizontal"
+                    android:weightSum="2"
+                    android:baselineAligned="false">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:layout_marginEnd="8dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/hourly_volume_threshold"
+                            android:textSize="12sp" />
+
+                        <EditText
+                            android:id="@+id/et_water_hourly_threshold"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:hint="@string/hint_500"
+                            android:inputType="numberDecimal"
+                            android:textSize="14sp"
+                            android:autofillHints="none" />
+
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:layout_marginStart="8dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/window_hours"
+                            android:textSize="12sp" />
+
+                        <EditText
+                            android:id="@+id/et_water_hourly_hours"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:hint="@string/hint_1"
+                            android:inputType="number"
+                            android:textSize="14sp"
+                            android:autofillHints="none" />
+
+                    </LinearLayout>
+
+                </LinearLayout>
+
+                <!-- Preset spinners for hourly threshold + hours -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <Spinner
+                        android:id="@+id/spinner_hourly_preset"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:spinnerMode="dropdown" />
+
+                    <View
+                        android:layout_width="8dp"
+                        android:layout_height="wrap_content" />
+
+                    <Spinner
+                        android:id="@+id/spinner_hourly_hours_preset"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:spinnerMode="dropdown" />
+
+                </LinearLayout>
+
+                <!-- Other thresholds -->
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:text="@string/low_pressure_threshold"
+                    android:textSize="12sp" />
+
+                <EditText
+                    android:id="@+id/et_low_pressure"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:hint="@string/hint_1_0"
+                    android:inputType="numberDecimal"
+                    android:textSize="14sp"
+                    android:autofillHints="none" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:text="@string/high_amps_threshold"
+                    android:textSize="12sp" />
+
+                <EditText
+                    android:id="@+id/et_high_amps"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:hint="@string/hint_6_0"
+                    android:inputType="numberDecimal"
+                    android:textSize="14sp"
+                    android:autofillHints="none" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:text="@string/high_amps_duration"
+                    android:textSize="12sp" />
+
+                <EditText
+                    android:id="@+id/et_high_amps_duration"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:hint="@string/hint_60"
+                    android:inputType="number"
+                    android:textSize="14sp"
+                    android:autofillHints="none" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:text="@string/water_usage_variance"
+                    android:textSize="12sp" />
+
+                <EditText
+                    android:id="@+id/et_water_variance"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:hint="@string/hint_0_1"
+                    android:inputType="numberDecimal"
+                    android:textSize="14sp"
+                    android:autofillHints="none" />
+
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+
+        <!-- Appearance & Controls card -->
+        <androidx.cardview.widget.CardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            app:cardCornerRadius="10dp"
+            app:cardElevation="4dp"
+            app:cardUseCompatPadding="true">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/appearance_controls"
+                    android:textStyle="bold"
+                    android:textSize="14sp"
+                    android:layout_marginBottom="8dp"
+                    android:textColor="#4A148C" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/invert_wind_arrow"
+                        android:textSize="13sp" />
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/switch_invert_wind"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical">
+
+                    <ImageView
+                        android:id="@+id/preview_wind_arrow"
+                        android:layout_width="36dp"
+                        android:layout_height="36dp"
+                        android:layout_marginBottom="6dp"
+                        android:contentDescription="@string/preview_wind_arrow"
+                        android:src="@drawable/ic_wind_arrow" />
+
+                    <TextView
+                        android:id="@+id/tv_wind_offset_value"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="6dp"
+                        android:text="@string/offset_format"
+                        android:textSize="12sp" />
+
+                    <SeekBar
+                        android:id="@+id/seek_wind_offset"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:max="360" />
+
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:text="@string/lights_control_backend"
+                    android:textSize="13sp" />
+
+                <RadioGroup
+                    android:id="@+id/rg_lights_control"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="horizontal">
+
+                    <RadioButton
+                        android:id="@+id/rb_control_drive"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="12dp"
+                        android:checked="false"
+                        android:text="@string/drive" />
+
+                    <RadioButton
+                        android:id="@+id/rb_control_firebase"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true"
+                        android:text="@string/firebase" />
+
+                </RadioGroup>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="12dp">
+
+                    <Button
+                        android:id="@+id/btn_save_backend"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="44dp"
+                        android:text="@string/save_backend"
+                        android:backgroundTint="#8E24AA"
+                        android:textColor="#FFFFFF"
+                        android:textSize="14sp" />
+
+                    <View
+                        android:layout_width="8dp"
+                        android:layout_height="wrap_content" />
+
+                    <Button
+                        android:id="@+id/btn_reload_backend"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="44dp"
+                        android:text="@string/reload"
+                        android:backgroundTint="#6A1B9A"
+                        android:textColor="#FFFFFF"
+                        android:textSize="14sp" />
+
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:orientation="horizontal">
+
+                    <Button
+                        android:id="@+id/btn_card_color"
+                        android:layout_width="0dp"
+                        android:layout_height="40dp"
+                        android:layout_marginEnd="6dp"
+                        android:layout_weight="1"
+                        android:backgroundTint="#8E24AA"
+                        android:text="@string/card"
+                        android:textColor="#FFFFFF"
+                        android:textSize="13sp" />
+
+                    <Button
+                        android:id="@+id/btn_graph_color"
+                        android:layout_width="0dp"
+                        android:layout_height="40dp"
+                        android:layout_marginStart="6dp"
+                        android:layout_weight="1"
+                        android:backgroundTint="#8E24AA"
+                        android:text="@string/graph"
+                        android:textColor="#FFFFFF"
+                        android:textSize="13sp" />
+
+                </LinearLayout>
+
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+
+        <!-- Security scheduling card -->
+        <androidx.cardview.widget.CardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            app:cardCornerRadius="10dp"
+            app:cardElevation="4dp"
+            app:cardUseCompatPadding="true">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/security_alarm_schedule"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp"
+                    android:textColor="#4A148C" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="wrap_content"
+                        android:text="@string/enable_at"
+                        android:textSize="13sp" />
+
+                    <Button
+                        android:id="@+id/btn_security_enable_time"
+                        android:layout_width="wrap_content"
+                        android:layout_height="40dp"
+                        android:text="@string/set_time"
+                        android:backgroundTint="#6A1B9A"
+                        android:textColor="#FFFFFF"
+                        android:textSize="13sp" />
+
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginTop="8dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="wrap_content"
+                        android:text="@string/disable_at"
+                        android:textSize="13sp" />
+
+                    <Button
+                        android:id="@+id/btn_security_disable_time"
+                        android:layout_width="wrap_content"
+                        android:layout_height="40dp"
+                        android:text="@string/set_time"
+                        android:backgroundTint="#6A1B9A"
+                        android:textColor="#FFFFFF"
+                        android:textSize="13sp" />
+
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="10dp"
+                    android:gravity="end">
+
+                    <Button
+                        android:id="@+id/btn_clear_security_schedule"
+                        android:layout_width="wrap_content"
+                        android:layout_height="40dp"
+                        android:text="@string/clear_schedule"
+                        android:backgroundTint="#BDBDBD"
+                        android:textColor="#000000"
+                        android:textSize="13sp" />
+
+                </LinearLayout>
+
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+
+        <!-- Action row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="12dp"
+            android:gravity="center"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_test_alarms"
+                style="@style/Widget.MaterialComponents.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:minWidth="40dp"
+                android:layout_marginEnd="6dp"
+                android:text="@string/test"
+                android:textColor="#FFFFFF"
+                android:backgroundTint="#6A1B9A"
+                app:cornerRadius="18dp"
+                app:iconTint="@android:color/white"
+                app:iconGravity="textStart"
+                app:iconSize="18dp"
+                android:contentDescription="@string/test_alarms_desc" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_play_tone"
+                style="@style/Widget.MaterialComponents.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:minWidth="40dp"
+                android:layout_marginEnd="6dp"
+                android:text="@string/preview"
+                android:textColor="#FFFFFF"
+                android:backgroundTint="#6A1B9A"
+                app:cornerRadius="18dp"
+                app:iconTint="@android:color/white"
+                app:iconGravity="textStart"
+                app:iconSize="18dp"
+                android:contentDescription="@string/preview_desc" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_reset_channel"
+                style="@style/Widget.MaterialComponents.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:minWidth="40dp"
+                android:layout_marginEnd="6dp"
+                android:text="@string/reset"
+                android:textColor="#FFFFFF"
+                android:backgroundTint="#FF7043"
+                app:cornerRadius="18dp"
+                app:iconTint="@android:color/white"
+                app:iconGravity="textStart"
+                app:iconSize="18dp"
+                android:contentDescription="@string/reset_desc" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_save_alarms"
+                style="@style/Widget.MaterialComponents.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:minWidth="40dp"
+                android:text="@string/save"
+                android:textColor="#FFFFFF"
+                android:backgroundTint="#388E3C"
+                app:cornerRadius="18dp"
+                app:iconTint="@android:color/white"
+                app:iconGravity="textStart"
+                app:iconSize="18dp"
+                android:contentDescription="@string/save_desc" />
+
+        </LinearLayout>
+
+        <!-- Recent Alarms card -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/recentAlarmsCard"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            app:cardCornerRadius="10dp"
+            app:cardElevation="4dp"
+            app:cardUseCompatPadding="true">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/recent_alarms"
+                    android:textStyle="bold"
+                    android:textSize="14sp"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:id="@+id/recent_alarm_1"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/recent_placeholder"
+                    android:textSize="13sp"
+                    android:layout_marginBottom="4dp" />
+
+                <TextView
+                    android:id="@+id/recent_alarm_2"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/recent_placeholder"
+                    android:textSize="13sp"
+                    android:layout_marginBottom="4dp" />
+
+                <TextView
+                    android:id="@+id/recent_alarm_3"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/recent_placeholder"
+                    android:textSize="13sp"
+                    android:layout_marginBottom="4dp" />
+
+                <TextView
+                    android:id="@+id/recent_alarm_4"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/recent_placeholder"
+                    android:textSize="13sp"
+                    android:layout_marginBottom="4dp" />
+
+                <TextView
+                    android:id="@+id/recent_alarm_5"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/recent_placeholder"
+                    android:textSize="13sp"
+                    android:layout_marginBottom="8dp" />
+
+                <Button
+                    android:id="@+id/btn_clear_history"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:text="@string/clear"
+                    android:layout_marginTop="4dp"
+                    android:backgroundTint="#BDBDBD"
+                    android:textColor="#000000"
+                    android:textSize="13sp" />
+
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+
+    </LinearLayout>
+
+</ScrollView>

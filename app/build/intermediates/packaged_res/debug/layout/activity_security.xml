@@ -1,0 +1,670 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/swipeRefreshLayout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <!-- Header -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="24dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="wrap_content"
+                    android:text="🚨 Security System"
+                    android:textSize="18sp"
+                    android:textColor="#ffffff"
+                    android:textStyle="bold" />
+
+                <!-- Inline network status dot so user sees home-network state without opening advanced panel -->
+                <ImageView
+                    android:id="@+id/securityNetworkHomeDotInline"
+                    android:layout_width="12dp"
+                    android:layout_height="12dp"
+                    android:layout_marginEnd="8dp"
+                    android:src="@drawable/ic_status_dot"
+                    app:tint="#9E9E9E"
+                    android:contentDescription="Home network status (inline)" />
+
+                <TextView
+                    android:id="@+id/securityBackButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="← Back"
+                    android:textSize="16sp"
+                    android:textColor="#4CAF50"
+                    android:padding="8dp" />
+
+            </LinearLayout>
+
+            <!-- System Status -->
+            <androidx.cardview.widget.CardView
+                android:id="@+id/systemStatusCard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                app:cardBackgroundColor="#2D5016"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="4dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="80dp"
+                        android:layout_marginBottom="8dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="System Status"
+                            android:textColor="#ffffff"
+                            android:textSize="18sp"
+                            android:textStyle="bold" />
+
+                        <androidx.appcompat.widget.SwitchCompat
+                            android:id="@+id/securityAlarmsSwitch"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:checked="true" />
+
+                        <!-- Replaced multiple force toggles with a single spanner icon that opens an advanced panel -->
+                        <ImageView
+                            android:id="@+id/securitySettingsSpanner"
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
+                            android:layout_marginStart="8dp"
+                            android:layout_marginEnd="8dp"
+                            android:src="@android:drawable/ic_menu_manage"
+                            android:contentDescription="Settings"
+                            app:tint="#FFFFFF" />
+
+                    </LinearLayout>
+
+                    <!-- Summary/status texts remain visible -->
+                    <TextView
+                        android:id="@+id/systemStatusText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🟢 All Zones Armed - System Online"
+                        android:textSize="16sp"
+                        android:textColor="#B8D4A0" />
+
+                    <TextView
+                        android:id="@+id/securityScheduleSummary"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Scheduled: Always"
+                        android:textSize="12sp"
+                        android:textColor="#CCCCCC"
+                        android:layout_marginTop="6dp" />
+
+                    <!-- Advanced panel (hidden by default) opened via the spanner icon: contains force toggles + network LEDs -->
+                    <LinearLayout
+                        android:id="@+id/securityAdvancedPanel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:paddingTop="12dp"
+                        android:paddingBottom="8dp"
+                        android:visibility="gone">
+
+                        <!-- Force toggles made clearer -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginBottom="8dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="Force alarms off while away"
+                                android:textColor="#FFFFFF"
+                                android:textSize="14sp" />
+
+                            <androidx.appcompat.widget.SwitchCompat
+                                android:id="@+id/securityForceAwaySwitch"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:checked="false" />
+
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginBottom="12dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="Force alarms off while home"
+                                android:textColor="#FFFFFF"
+                                android:textSize="14sp" />
+
+                            <androidx.appcompat.widget.SwitchCompat
+                                android:id="@+id/securityForceHomeSwitch"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:checked="false" />
+
+                        </LinearLayout>
+
+                        <!-- Divider -->
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:background="#33444444"
+                            android:layout_marginBottom="8dp" />
+
+                        <!-- Network status LEDs and descriptions -->
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Network status"
+                            android:textColor="#CCCCCC"
+                            android:textSize="12sp"
+                            android:layout_marginBottom="6dp" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginBottom="6dp">
+
+                            <ImageView
+                                android:id="@+id/securityNetworkHomeDot"
+                                android:layout_width="12dp"
+                                android:layout_height="12dp"
+                                android:src="@drawable/ic_status_dot"
+                                app:tint="#9E9E9E"
+                                android:contentDescription="Home network status" />
+
+                            <TextView
+                                android:id="@+id/securityNetworkHomeText"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="8dp"
+                                android:text="On home network"
+                                android:textColor="#FFFFFF"
+                                android:textSize="14sp" />
+
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+
+                            <ImageView
+                                android:id="@+id/securityNetworkBridgeDot"
+                                android:layout_width="12dp"
+                                android:layout_height="12dp"
+                                android:src="@drawable/ic_status_dot"
+                                app:tint="#9E9E9E"
+                                android:contentDescription="Bridge network status" />
+
+                            <TextView
+                                android:id="@+id/securityNetworkBridgeText"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="8dp"
+                                android:text="Bridge / cloud status"
+                                android:textColor="#FFFFFF"
+                                android:textSize="14sp" />
+
+                        </LinearLayout>
+
+                        <!-- Developer debug line: shows SSID/method/onHome/gateway when present -->
+                        <TextView
+                            android:id="@+id/securityNetworkDebugText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="SSID: n/a  method: n/a  onHome: n/a  gw: n/a"
+                            android:textColor="#FFCC00"
+                            android:textSize="12sp"
+                            android:layout_marginTop="8dp"
+                            android:visibility="visible" />
+
+                        <!-- Quick actions for developers/users -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginTop="8dp">
+
+                            <Button
+                                android:id="@+id/refreshNetworkButton"
+                                android:layout_width="0dp"
+                                android:layout_weight="1"
+                                android:layout_height="40dp"
+                                android:text="Refresh"
+                                android:textSize="12sp"
+                                android:backgroundTint="#455A64"
+                                android:textColor="#FFFFFF" />
+
+                            <Space
+                                android:layout_width="8dp"
+                                android:layout_height="1dp" />
+
+                            <Button
+                                android:id="@+id/saveHomeButton"
+                                android:layout_width="0dp"
+                                android:layout_weight="1"
+                                android:layout_height="40dp"
+                                android:text="Save as Home"
+                                android:textSize="12sp"
+                                android:backgroundTint="#388E3C"
+                                android:textColor="#FFFFFF" />
+
+                        </LinearLayout>
+
+                     </LinearLayout>
+
+                    <!-- ...existing code... -->
+
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
+            <!-- Zone Grid -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Security Zones"
+                android:textSize="18sp"
+                android:textColor="#ffffff"
+                android:textStyle="bold"
+                android:layout_marginBottom="12dp" />
+
+            <!-- Row 1: front, garage, garage side -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="12dp">
+
+                <androidx.cardview.widget.CardView
+                    android:id="@+id/frontCard"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="120dp"
+                    android:layout_marginEnd="6dp"
+                    app:cardBackgroundColor="#1B5E20"
+                    app:cardCornerRadius="8dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:orientation="vertical"
+                        android:gravity="center"
+                        android:padding="12dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🏡"
+                            android:textSize="24sp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Front"
+                            android:textColor="#ffffff"
+                            android:textStyle="bold"
+                            android:textSize="10sp" />
+
+                        <TextView
+                            android:id="@+id/frontStatus"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🟢 Clear"
+                            android:textColor="#4CAF50"
+                            android:textSize="12sp" />
+
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+
+                <androidx.cardview.widget.CardView
+                    android:id="@+id/garageCard"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="120dp"
+                    android:layout_marginStart="6dp"
+                    android:layout_marginEnd="6dp"
+                    app:cardBackgroundColor="#1B5E20"
+                    app:cardCornerRadius="8dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:orientation="vertical"
+                        android:gravity="center"
+                        android:padding="12dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🚪"
+                            android:textSize="24sp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Garage"
+                            android:textColor="#ffffff"
+                            android:textStyle="bold"
+                            android:textSize="10sp" />
+
+                        <TextView
+                            android:id="@+id/garageStatus"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🟢 Clear"
+                            android:textColor="#4CAF50"
+                            android:textSize="12sp" />
+
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+
+                <androidx.cardview.widget.CardView
+                    android:id="@+id/garageSideCard"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="120dp"
+                    android:layout_marginStart="6dp"
+                    app:cardBackgroundColor="#1B5E20"
+                    app:cardCornerRadius="8dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:orientation="vertical"
+                        android:gravity="center"
+                        android:padding="12dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🏠"
+                            android:textSize="24sp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Garage Side"
+                            android:textColor="#ffffff"
+                            android:textStyle="bold"
+                            android:textSize="10sp" />
+
+                        <TextView
+                            android:id="@+id/garageSideStatus"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🟢 Clear"
+                            android:textColor="#4CAF50"
+                            android:textSize="12sp" />
+
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+
+            </LinearLayout>
+
+            <!-- Row 2: north, door, south -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="12dp">
+
+                <androidx.cardview.widget.CardView
+                    android:id="@+id/northCard"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="120dp"
+                    android:layout_marginEnd="6dp"
+                    app:cardBackgroundColor="#1B5E20"
+                    app:cardCornerRadius="8dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:orientation="vertical"
+                        android:gravity="center"
+                        android:padding="12dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="❄️"
+                            android:textSize="24sp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="North"
+                            android:textColor="#ffffff"
+                            android:textStyle="bold"
+                            android:textSize="10sp" />
+
+                        <TextView
+                            android:id="@+id/northStatus"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🟢 Clear"
+                            android:textColor="#4CAF50"
+                            android:textSize="12sp" />
+
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+
+                <androidx.cardview.widget.CardView
+                    android:id="@+id/doorCard"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="120dp"
+                    android:layout_marginStart="6dp"
+                    android:layout_marginEnd="6dp"
+                    app:cardBackgroundColor="#1B5E20"
+                    app:cardCornerRadius="8dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:orientation="vertical"
+                        android:gravity="center"
+                        android:padding="12dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🚪"
+                            android:textSize="24sp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Door"
+                            android:textColor="#ffffff"
+                            android:textStyle="bold"
+                            android:textSize="10sp" />
+
+                        <TextView
+                            android:id="@+id/doorStatus"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🟢 Clear"
+                            android:textColor="#4CAF50"
+                            android:textSize="12sp" />
+
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+
+                <androidx.cardview.widget.CardView
+                    android:id="@+id/southCard"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="120dp"
+                    android:layout_marginStart="6dp"
+                    app:cardBackgroundColor="#1B5E20"
+                    app:cardCornerRadius="8dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:orientation="vertical"
+                        android:gravity="center"
+                        android:padding="12dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🌅"
+                            android:textSize="24sp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="South"
+                            android:textColor="#ffffff"
+                            android:textStyle="bold"
+                            android:textSize="10sp" />
+
+                        <TextView
+                            android:id="@+id/southStatus"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🟢 Clear"
+                            android:textColor="#4CAF50"
+                            android:textSize="12sp" />
+
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+
+            </LinearLayout>
+
+            <!-- Row 3: back (single) -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="24dp"
+                android:gravity="center_horizontal">
+
+                <androidx.cardview.widget.CardView
+                    android:id="@+id/backCard"
+                    android:layout_width="match_parent"
+                    android:layout_height="120dp"
+                    app:cardBackgroundColor="#1B5E20"
+                    app:cardCornerRadius="8dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:orientation="vertical"
+                        android:gravity="center"
+                        android:padding="12dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🌳"
+                            android:textSize="24sp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Back"
+                            android:textColor="#ffffff"
+                            android:textStyle="bold"
+                            android:textSize="14sp" />
+
+                        <TextView
+                            android:id="@+id/backStatus"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🟢 Clear"
+                            android:textColor="#4CAF50"
+                            android:textSize="12sp" />
+
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+
+            </LinearLayout>
+
+            <!-- Recent Alerts -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Recent Activity"
+                android:textSize="18sp"
+                android:textColor="#ffffff"
+                android:textStyle="bold"
+                android:layout_marginBottom="12dp" />
+
+            <androidx.cardview.widget.CardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:cardBackgroundColor="#2C2C2C"
+                app:cardCornerRadius="8dp">
+
+                <!-- Replace plain TextView with a NestedScrollView so the history can be scrolled -->
+                <androidx.core.widget.NestedScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="140dp"
+                    android:fillViewport="false"
+                    android:fadeScrollbars="true"
+                    android:scrollbarStyle="insideInset"
+                    android:scrollbars="vertical">
+
+                    <TextView
+                        android:id="@+id/recentActivityText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="No recent activity"
+                        android:textSize="14sp"
+                        android:textColor="#888888"
+                        android:padding="16dp"
+                        android:lineSpacingExtra="2dp"
+                        android:ellipsize="none"
+                        android:overScrollMode="ifContentScrolls" />
+
+                </androidx.core.widget.NestedScrollView>
+
+            </androidx.cardview.widget.CardView>
+
+        </LinearLayout>
+    </ScrollView>
+</androidx.swiperefreshlayout.widget.SwipeRefreshLayout>

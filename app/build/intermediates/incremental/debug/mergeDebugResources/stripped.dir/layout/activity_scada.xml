@@ -1,0 +1,1135 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/swipeRefreshLayout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <!-- Header -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="24dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="wrap_content"
+                    android:text="� System Monitoring"
+                    android:textSize="24sp"
+                    android:textColor="?android:attr/textColorPrimary"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/scadaBackButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="← Back"
+                    android:textSize="16sp"
+                    android:textColor="?android:attr/textColorPrimary"
+                    android:padding="8dp" />
+
+            </LinearLayout>
+
+            <!-- Outside Lights Control (moved to top) -->
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginTop="0dp"
+                android:layout_marginBottom="12dp"
+                android:gravity="center_vertical">
+
+                <ImageView
+                    android:id="@+id/lightsTitleIcon"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_marginEnd="8dp"
+                    android:src="@drawable/ic_lightbulb"
+                    app:tint="?android:attr/textColorPrimary"
+                    android:contentDescription="Lights" />
+
+                <TextView
+                    android:id="@+id/lightsTitleText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Outside Lights"
+                    android:textSize="18sp"
+                    android:textColor="?android:attr/textColorPrimary"
+                    android:textStyle="bold" />
+
+            </LinearLayout>
+
+            <androidx.cardview.widget.CardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:cardBackgroundColor="#2C2C2C"
+                app:cardCornerRadius="8dp"
+                android:layout_marginBottom="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <!-- Lights Status Display -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginBottom="16dp">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_weight="1"
+                            android:layout_height="wrap_content"
+                            android:text="🔌 Status:"
+                            android:textColor="#ffffff"
+                            android:textSize="16sp" />
+
+                        <!-- Icon + text for status -->
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+
+                            <ImageView
+                                android:id="@+id/lightsStatusIcon"
+                                android:layout_width="20dp"
+                                android:layout_height="20dp"
+                                android:src="@drawable/ic_lightbulb"
+                                app:tint="#FF5722"
+                                android:contentDescription="Lights status icon"
+                                android:layout_marginEnd="6dp" />
+
+                            <TextView
+                                android:id="@+id/lightsStatusText"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="OFF"
+                                android:textColor="#FF5722"
+                                android:textSize="16sp"
+                                android:textStyle="bold" />
+
+                        </LinearLayout>
+
+                    </LinearLayout>
+
+                    <!-- Control Buttons -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center">
+
+                        <Button
+                            android:id="@+id/lightsOnButton"
+                            android:layout_width="0dp"
+                            android:layout_weight="1"
+                            android:layout_height="56dp"
+                            android:layout_marginEnd="8dp"
+                            android:text="LIGHTS ON"
+                            android:drawableStart="@drawable/ic_lightbulb"
+                            android:textColor="#ffffff"
+                            android:backgroundTint="#4CAF50"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
+
+                        <Button
+                            android:id="@+id/lightsOffButton"
+                            android:layout_width="0dp"
+                            android:layout_weight="1"
+                            android:layout_height="56dp"
+                            android:layout_marginStart="8dp"
+                            android:text="LIGHTS OFF"
+                            android:drawableStart="@drawable/ic_lightbulb"
+                            android:textColor="#ffffff"
+                            android:backgroundTint="#FF5722"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
+
+                    </LinearLayout>
+
+
+                    <!-- Technical Details -->
+                    <TextView
+                        android:id="@+id/lightsDetails"
+                        android:layout_width="match_parent"
+                        android:layout_height="33dp"
+                        android:layout_marginTop="12dp"
+                        android:gravity="center"
+                        android:text="Sent TXT: -- | Y21_read: 0 | Last Command: --"
+                        android:textColor="@color/light_grey"
+                        android:textSize="12sp" />
+
+                </LinearLayout>
+
+            </androidx.cardview.widget.CardView>
+
+            <!-- 2) Weather card below the lights controller -->
+            <!-- Weather Monitoring Section -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🌤️ Weather Station"
+                android:textSize="18sp"
+                android:textColor="?android:attr/textColorPrimary"
+                android:textStyle="bold"
+                android:layout_marginBottom="12dp" />
+
+            <!-- Weather Grid -->
+            <LinearLayout
+                android:id="@+id/weatherSection"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="16dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:background="?android:attr/selectableItemBackground">
+
+                <androidx.cardview.widget.CardView
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="100dp"
+                    android:layout_marginEnd="4dp"
+                    app:cardBackgroundColor="#0D47A1"
+                    app:cardCornerRadius="8dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:orientation="vertical"
+                        android:gravity="center"
+                        android:padding="8dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🌡️"
+                            android:textSize="20sp" />
+
+                        <TextView
+                            android:id="@+id/indoorTemp"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="--°C"
+                            android:textColor="#ffffff"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Indoor"
+                            android:textColor="#BBDEFB"
+                            android:textSize="12sp" />
+
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+
+                <androidx.cardview.widget.CardView
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="100dp"
+                    android:layout_marginStart="2dp"
+                    android:layout_marginEnd="2dp"
+                    app:cardBackgroundColor="#1565C0"
+                    app:cardCornerRadius="8dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:orientation="vertical"
+                        android:gravity="center"
+                        android:padding="8dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🌤️"
+                            android:textSize="20sp" />
+
+                        <TextView
+                            android:id="@+id/outdoorTemp"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="--°C"
+                            android:textColor="#ffffff"
+                            android:textSize="11sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/outdoorHumidity"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="--%"
+                            android:textColor="#81C784"
+                            android:textSize="10sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Outdoor"
+                            android:textColor="#BBDEFB"
+                            android:textSize="8sp" />
+
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+
+                <androidx.cardview.widget.CardView
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="100dp"
+                    android:layout_marginStart="4dp"
+                    app:cardBackgroundColor="#1976D2"
+                    app:cardCornerRadius="8dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:orientation="vertical"
+                        android:gravity="center"
+                        android:padding="8dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="💨"
+                            android:textSize="20sp" />
+
+                        <TextView
+                            android:id="@+id/windSpeed"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="-- km/h"
+                            android:textColor="#ffffff"
+                            android:textSize="9sp"
+                            android:textStyle="bold" />
+
+                        <ImageView
+                            android:id="@+id/windDirectionArrow"
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:layout_marginTop="2dp"
+                            android:src="@drawable/ic_wind_arrow"
+                            app:tint="#FFFFFF"
+                            android:contentDescription="Wind direction"
+                            android:visibility="visible" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Wind"
+                            android:textColor="#BBDEFB"
+                            android:textSize="9sp" />
+
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+
+            </LinearLayout>
+
+            <!-- Extra weather row: Sun position and Tide information -->
+            <LinearLayout
+                android:id="@+id/weatherExtraRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="16dp">
+
+                <androidx.cardview.widget.CardView
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="80dp"
+                    android:layout_marginEnd="4dp"
+                    app:cardBackgroundColor="#0288D1"
+                    app:cardCornerRadius="8dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:orientation="vertical"
+                        android:gravity="center"
+                        android:padding="8dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="☀️"
+                            android:textSize="18sp" />
+
+                        <TextView
+                            android:id="@+id/sunInfo"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="--:-- / --:--"
+                            android:textColor="#ffffff"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Sunrise / Sunset"
+                            android:textColor="#BBDEFB"
+                            android:textSize="9sp" />
+
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+
+                <androidx.cardview.widget.CardView
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="80dp"
+                    android:layout_marginStart="4dp"
+                    app:cardBackgroundColor="#00796B"
+                    app:cardCornerRadius="8dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:orientation="vertical"
+                        android:gravity="center"
+                        android:padding="8dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🌊"
+                            android:textSize="12sp" />
+
+                        <TextView
+                            android:id="@+id/tideInfo"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Tide: N/A"
+                            android:textColor="#ffffff"
+                            android:textSize="10sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Next high/low"
+                            android:textColor="#BBDEFB"
+                            android:textSize="9sp" />
+
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+
+            </LinearLayout>
+
+            <!-- 3) Water heating system (geyser temp + pressure) -->
+            <!-- Geyser System Status -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🔥 Water Heating System"
+                android:textSize="18sp"
+                android:textColor="?android:attr/textColorPrimary"
+                android:textStyle="bold"
+                android:layout_marginBottom="12dp" />
+
+            <!-- Water Temperature Gauge -->
+            <androidx.cardview.widget.CardView
+                android:id="@+id/geyserSection"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                app:cardBackgroundColor="#1A237E"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="4dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?android:attr/selectableItemBackground">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:padding="16dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🌡️ Geyser Temperature"
+                            android:textSize="16sp"
+                            android:textColor="#ffffff"
+                            android:textStyle="bold"
+                            android:layout_marginBottom="4dp" />
+
+                        <TextView
+                            android:id="@+id/waterTempValue"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="--°C"
+                            android:textSize="32sp"
+                            android:textColor="#9FA8DA"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/waterTempStatus"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Normal Range"
+                            android:textSize="14sp"
+                            android:textColor="#4CAF50" />
+
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:gravity="center">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Min: 0°C"
+                            android:textSize="12sp"
+                            android:textColor="#9FA8DA" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Max: 80°C"
+                            android:textSize="12sp"
+                            android:textColor="#9FA8DA" />
+
+                        <TextView
+                            android:id="@+id/waterTempTrend"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="→"
+                            android:textSize="20sp"
+                            android:textColor="#9FA8DA"
+                            android:layout_marginTop="4dp" />
+
+                    </LinearLayout>
+
+                </LinearLayout>
+
+            </androidx.cardview.widget.CardView>
+
+            <!-- Water Pressure Gauge -->
+            <androidx.cardview.widget.CardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="24dp"
+                app:cardBackgroundColor="#1A237E"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="4dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:padding="16dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="4dp"
+                            android:text="💧 Geyser Pressure"
+                            android:textColor="#ffffff"
+                            android:textSize="16sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/waterPressureValue"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="-- Bar"
+                            android:textColor="#9FA8DA"
+                            android:textSize="32sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/waterPressureStatus"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Normal Range"
+                            android:textColor="#4CAF50"
+                            android:textSize="14sp" />
+
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:gravity="center">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Min: 2 Bar"
+                            android:textSize="12sp"
+                            android:textColor="#9FA8DA" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Max: 6 Bar"
+                            android:textSize="12sp"
+                            android:textColor="#9FA8DA" />
+
+                        <TextView
+                            android:id="@+id/waterPressureTrend"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="→"
+                            android:textSize="20sp"
+                            android:textColor="#9FA8DA"
+                            android:layout_marginTop="4dp" />
+
+                    </LinearLayout>
+
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
+            <!-- 4) Electrical system -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="⚡ Electrical System"
+                android:textSize="18sp"
+                android:textColor="?android:attr/textColorPrimary"
+                android:textStyle="bold"
+                android:layout_marginBottom="12dp" />
+
+            <androidx.cardview.widget.CardView
+                android:id="@+id/powerSection"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                app:cardBackgroundColor="#E65100"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?android:attr/selectableItemBackground"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="4dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:padding="16dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="⚡ Current Draw (Amps)"
+                            android:textSize="16sp"
+                            android:textColor="#ffffff"
+                            android:textStyle="bold"
+                            android:layout_marginBottom="4dp" />
+
+                        <TextView
+                            android:id="@+id/currentAmps"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="-- A"
+                            android:textSize="28sp"
+                            android:textColor="#FFCC80"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/powerStatus"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Normal Usage"
+                            android:textSize="14sp"
+                            android:textColor="#4CAF50" />
+
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:gravity="center">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Power (kW)"
+                            android:textSize="12sp"
+                            android:textColor="#FFCC80" />
+
+                        <TextView
+                            android:id="@+id/currentPower"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="-- kW"
+                            android:textSize="16sp"
+                            android:textColor="#FFCC80"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/dailyPower"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="-- kWh"
+                            android:textSize="14sp"
+                            android:textColor="#FFCC80"
+                            android:layout_marginTop="4dp" />
+
+                    </LinearLayout>
+
+
+                </LinearLayout>
+
+            </androidx.cardview.widget.CardView>
+
+            <!-- 5) Equipment status card(s) -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="� Equipment Status"
+                android:textSize="18sp"
+                android:textColor="?android:attr/textColorPrimary"
+                android:textStyle="bold"
+                android:layout_marginBottom="12dp" />
+
+            <!-- System Health Grid for Equipment: DVR heartbeat + Alarm status -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="16dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp">
+
+                <!-- DVR Heartbeat card (left) - matches Alarm Status card (right) -->
+                <androidx.cardview.widget.CardView
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="80dp"
+                    android:layout_marginEnd="6dp"
+                    app:cardBackgroundColor="#37474F"
+                    app:cardCornerRadius="8dp"
+                    app:cardElevation="2dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:orientation="vertical"
+                        android:padding="10dp"
+                        android:gravity="center_vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="DVR Heartbeat"
+                            android:textColor="#FFFFFF"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginTop="6dp">
+
+                            <ImageView
+                                android:id="@+id/dvrStatusDot"
+                                android:layout_width="14dp"
+                                android:layout_height="14dp"
+                                android:layout_marginEnd="8dp"
+                                android:src="@drawable/ic_status_dot"
+                                app:tint="#4CAF50"
+                                android:contentDescription="DVR status" />
+
+                            <TextView
+                                android:id="@+id/dvrHeartbeatStatus"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Online"
+                                android:textColor="#4CAF50"
+                                android:textSize="14sp"
+                                android:textStyle="bold" />
+
+                        </LinearLayout>
+
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+
+                <!-- Alarm Status card (right) - Modern Material Design -->
+                <androidx.cardview.widget.CardView
+                    android:id="@+id/alarmStatusCard"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="80dp"
+                    android:layout_marginStart="6dp"
+                    app:cardBackgroundColor="#2C3E50"
+                    app:cardCornerRadius="12dp"
+                    app:cardElevation="4dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:orientation="vertical"
+                        android:padding="10dp"
+                        android:gravity="center_vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="⚙️ Setup"
+                            android:textColor="#ECEFF1"
+                            android:textSize="13sp"
+                            android:textStyle="bold"
+                            android:letterSpacing="0.05" />
+
+                        <!-- Row with dot + label to match DVR alignment -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginTop="6dp">
+
+                            <ImageView
+                                android:id="@+id/alarmStatusDot"
+                                android:layout_width="14dp"
+                                android:layout_height="14dp"
+                                android:layout_marginEnd="8dp"
+                                android:src="@drawable/ic_status_dot"
+                                app:tint="#4CAF50"
+                                android:contentDescription="Alarm status" />
+
+                            <TextView
+                                android:id="@+id/alarmActiveStatus"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Active"
+                                android:textColor="#4CAF50"
+                                android:textSize="14sp"
+                                android:textStyle="bold" />
+
+                        </LinearLayout>
+
+                        <!-- Presence indicator row: shows whether the device is on the home network -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginTop="8dp">
+
+                            <ImageView
+                                android:id="@+id/setupPresenceDot"
+                                android:layout_width="10dp"
+                                android:layout_height="10dp"
+                                android:layout_marginEnd="8dp"
+                                android:src="@drawable/ic_status_dot"
+                                app:tint="#4CAF50"
+                                android:contentDescription="Presence dot" />
+
+                            <TextView
+                                android:id="@+id/setupPresenceText"
+                                android:layout_width="0dp"
+                                android:layout_weight="1"
+                                android:layout_height="wrap_content"
+                                android:text="At home"
+                                android:textColor="#ECEFF1"
+                                android:textSize="12sp" />
+
+                            <Button
+                                android:id="@+id/checkNetworkButton"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Check network"
+                                android:textSize="11sp"
+                                android:backgroundTint="#607D8B"
+                                android:textColor="#FFFFFF" />
+
+                        </LinearLayout>
+
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+
+            </LinearLayout>
+
+            <!-- DVR Temperature Monitoring -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="16dp">
+
+                <androidx.cardview.widget.CardView
+                    android:id="@+id/dvrSection"
+                    android:layout_width="match_parent"
+                    android:layout_height="80dp"
+                    app:cardBackgroundColor="#37474F"
+                    app:cardCornerRadius="8dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?android:attr/selectableItemBackground">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:orientation="vertical"
+                        android:gravity="center"
+                        android:padding="8dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🌡️ DVR Enclosure Temperature"
+                            android:textColor="#ffffff"
+                            android:textSize="10sp"
+                            android:textStyle="bold"
+                            android:maxLines="1"
+                            android:ellipsize="end" />
+
+                        <TextView
+                            android:id="@+id/dvrTemp"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="--°C"
+                            android:textColor="#ffffff"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/dvrTempStatus"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Normal"
+                            android:textColor="#4CAF50"
+                            android:textSize="9sp" />
+
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+
+            </LinearLayout>
+
+            <!-- 6) System Health (moved to bottom) -->
+            <!-- System Diagnostics -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="👨‍⚕️ System Health"
+                android:textSize="18sp"
+                android:textColor="#FFFFFF"
+                android:textStyle="bold"
+                android:layout_marginBottom="12dp" />
+
+            <androidx.cardview.widget.CardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:cardBackgroundColor="#2C2C2C"
+                app:cardCornerRadius="8dp">
+
+                <!-- Changed: wrap content in a vertical layout so we can append lights authorization at the bottom -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/diagnosticsText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Last Update: --:--\nWater Temperature: Online\nWater Pressure: Online\nMain Controller: Ready"
+                        android:textSize="14sp"
+                        android:textColor="#B0BEC5"
+                        android:padding="16dp" />
+
+                    <!-- Inline status line: Lights authorization, shown at the very bottom of System Health list -->
+                    <TextView
+                        android:id="@+id/lightsAuthStatus"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Lights authorization: Unknown"
+                        android:textSize="13sp"
+                        android:textColor="#B0BEC5"
+                        android:paddingLeft="16dp"
+                        android:paddingRight="16dp"
+                        android:paddingBottom="16dp"
+                        android:paddingTop="0dp" />
+                </LinearLayout>
+
+            </androidx.cardview.widget.CardView>
+
+            <!-- Analytics Section -->
+            <LinearLayout
+                android:id="@+id/analyticsSection"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center"
+                android:layout_marginBottom="16dp"
+                android:padding="12dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Total Data Points"
+                        android:textColor="?android:attr/textColorSecondary"
+                        android:textSize="12sp"/>
+                    <TextView
+                        android:id="@+id/totalPointsValue"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="--"
+                        android:textColor="?android:attr/textColorPrimary"
+                        android:textSize="18sp"
+                        android:textStyle="bold"/>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Data Rate"
+                        android:textColor="?android:attr/textColorSecondary"
+                        android:textSize="12sp"/>
+                    <TextView
+                        android:id="@+id/dataRateValue"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="--"
+                        android:textColor="?android:attr/textColorPrimary"
+                        android:textSize="18sp"
+                        android:textStyle="bold"/>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Active Sensors"
+                        android:textColor="?android:attr/textColorSecondary"
+                        android:textSize="12sp"/>
+                    <TextView
+                        android:id="@+id/activeSensorsValue"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="--"
+                        android:textColor="?android:attr/textColorPrimary"
+                        android:textSize="18sp"
+                        android:textStyle="bold"/>
+                </LinearLayout>
+            </LinearLayout>
+            <!-- End Analytics Section -->
+
+            <!-- Google Sign-In Button -->
+            <com.google.android.gms.common.SignInButton
+                android:id="@+id/googleSignInButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="16dp"
+                android:layout_marginBottom="16dp" />
+
+            <!-- Hide legacy status badges: they’re no longer used; status is shown in System Health text -->
+            <TextView
+                android:id="@+id/scadaStatusBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Online"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:paddingLeft="10dp"
+                android:paddingRight="10dp"
+                android:paddingTop="6dp"
+                android:paddingBottom="6dp"
+                android:textColor="@android:color/white"
+                android:background="@drawable/status_badge_background"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="8dp"
+                android:layout_marginEnd="8dp"
+                android:layout_marginStart="8dp"
+                android:gravity="center"
+                android:contentDescription="SCADA status"
+                android:visibility="gone" />
+
+            <!-- Inside the SCADA card container, add a small status badge at the bottom -->
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:id="@+id/scadaCardContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <!-- FCM/Connectivity status badge (red variant applied via background) -->
+                <TextView
+                    android:id="@+id/scadaStatusBadgeFcm"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="FCM"
+                    android:textSize="12sp"
+                    android:textColor="#FFFFFF"
+                    android:paddingLeft="8dp"
+                    android:paddingTop="4dp"
+                    android:paddingRight="8dp"
+                    android:paddingBottom="4dp"
+                    android:background="@drawable/status_badge_background_red"
+                    android:visibility="gone"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    android:layout_margin="8dp" />
+
+            </androidx.constraintlayout.widget.ConstraintLayout>
+
+
+        </LinearLayout>
+
+    </ScrollView>
+</androidx.swiperefreshlayout.widget.SwipeRefreshLayout>

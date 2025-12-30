@@ -1,26 +1,42 @@
-# Android / Java / Kotlin
-.gradle/
-**/build/
-/build/
-local.properties
-/.idea/
+# Android/IntelliJ
 *.iml
-*.log
-*.keystore
+.gradle/
+/local.properties
+/.idea/workspace.xml
+/.idea/libraries
+/.idea/caches
+/.idea/modules.xml
+/.idea/assetWizardSettings.xml
+/.idea/navEditor.xml
+/.idea/inspectionProfiles
+.DS_Store
+/build/
 /captures/
 .externalNativeBuild/
-.cxx/
-# Ignore Gradle wrapper jar (if you prefer not to track it)
-# gradle/wrapper/gradle-wrapper.jar
-# OS
-.DS_Store
-Thumbs.db
-# IDE
-.vscode/
-# Kotlin
-*.kotlin_module
-# Ignore API keys and credentials (uncomment if you want them ignored)
-# google-services.json
-# keystore files
-# *.jks
+
+# Gradle
+.gradle/
+/build/
+
+# Signing keys
+**/signing.properties
+**/keystore.jks
+**/*.keystore
+**/*.jks
+
+# Google Services (keep JSON if needed, but ignore debug variants)
+**/google-services.json
+
+# Logs
+*.log
+
+# Kotlin/Java
+out/
+
+# Misc
+/.vs/
+/.vscode/
+*.apk
+*.ap_
+*.aab
 

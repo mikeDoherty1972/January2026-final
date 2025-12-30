@@ -1,0 +1,19 @@
+#Tue Dec 30 16:26:40 SAST 2025
+path.4=classes2.dex
+path.3=4/classes.dex
+path.2=1/classes.dex
+path.1=0/classes.dex
+path.5=classes3.dex
+path.0=classes.dex
+base.4=C\:\\website\\home_App_DecemberD_2025\\app\\build\\intermediates\\dex\\debug\\mergeExtDexDebug\\classes2.dex
+base.3=C\:\\website\\home_App_DecemberD_2025\\app\\build\\intermediates\\dex\\debug\\mergeProjectDexDebug\\4\\classes.dex
+base.2=C\:\\website\\home_App_DecemberD_2025\\app\\build\\intermediates\\dex\\debug\\mergeProjectDexDebug\\1\\classes.dex
+base.1=C\:\\website\\home_App_DecemberD_2025\\app\\build\\intermediates\\dex\\debug\\mergeProjectDexDebug\\0\\classes.dex
+base.0=C\:\\website\\home_App_DecemberD_2025\\app\\build\\intermediates\\dex\\debug\\mergeExtDexDebug\\classes.dex
+renamed.3=classes4.dex
+renamed.2=classes3.dex
+renamed.1=classes2.dex
+renamed.0=classes.dex
+renamed.5=classes6.dex
+renamed.4=classes5.dex
+base.5=C\:\\website\\home_App_DecemberD_2025\\app\\build\\intermediates\\dex\\debug\\mergeExtDexDebug\\classes3.dex
